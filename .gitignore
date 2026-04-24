@@ -1,0 +1,55 @@
+# Secrets and environment
+.env
+.env.*
+!.env.example
+
+# Backups and database dumps
+backups/
+*.sql.gz
+*.sql.bz2
+*.sql.xz
+*.dump
+
+# Logs
+logs/
+*.log
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# TLS certs and private keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Cloudflare tunnel credentials
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!infra/cloudflare/*.json
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*~
+
+# Build artifacts
+build/
+dist/
+*.o
+*.so
