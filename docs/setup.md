@@ -62,7 +62,26 @@ the DB editor. The rest are internal service credentials.
 
 `.env` is gitignored. Never commit it.
 
-## 3. Bring the stack up
+## 3. Pre-create runtime directories with correct ownership
+
+The compose file bind-mounts `docker/data/`, `docker/certs/`, `docker/install/`,
+and `docker/eq2emu-editor/` into the containers. If Docker creates these
+dirs on its own during `up`, they end up owned by `root:root` and the
+container processes can't write to them — mariadbd fails its healthcheck
+and the eq2emu-server entrypoint gets permission errors mid-setup.
+
+Create the dirs up front with the ownership each container expects:
+
+```bash
+mkdir -p docker/data docker/certs docker/install docker/eq2emu-editor
+sudo chown 999:999   docker/data docker/certs           # mariadb user inside the image
+sudo chown 1000:1000 docker/install docker/eq2emu-editor # eq2emu user inside the image
+```
+
+This is a one-time step per checkout. After the first `compose up`, these
+dirs remain correctly owned.
+
+## 4. Bring the stack up
 
 ```bash
 cd docker
@@ -83,7 +102,7 @@ docker compose logs -f eq2emu-server
 Expect to see the server finish compiling, then start world and login
 processes, then open the Dawn web listener on `:2424`.
 
-## 4. Verify services
+## 5. Verify services
 
 All services should be `running (healthy)`:
 
@@ -114,7 +133,7 @@ Both should return `HTTP/1.1 200` (or a redirect) once the services are
 up. The `-k` flag on the first one skips TLS verification because the
 Dawn UI uses a self-signed cert.
 
-## 5. Log into the web interfaces
+## 6. Log into the web interfaces
 
 - **Dawn admin UI:** <https://127.0.0.1:2424>
   - Accept the self-signed cert warning in your browser.
@@ -126,7 +145,7 @@ Dawn UI uses a self-signed cert.
 Neither of these is exposed beyond `127.0.0.1`. Accessing them from
 another machine requires an SSH tunnel or (eventually) a VPN.
 
-## 6. Connect the EQ2 client
+## 7. Connect the EQ2 client
 
 The client runs on Windows (official EQ2 from Steam). It does not run on
 the Linux host; point a Windows client at the server from the same LAN,
@@ -182,6 +201,13 @@ procedure. Don't edit vendored files outside a sync PR; use
 
 ## Known issues
 
+- **Dir ownership on first run:** if you skip the `chown` step in
+  section 3, mariadbd and the eq2emu-server entrypoint both fail with
+  "Permission denied" writing into the bind-mounted host dirs. Recovery
+  is: `docker compose down`, apply the `chown`s, delete
+  `docker/install/dawn_install` and `docker/install/firstrun_dbeditor`
+  if they were touched by the failed run, then bring the stack up
+  again. The `first_install` marker can stay — DBs are safe to keep.
 - **First-run certificate race:** the `cert-gen` service generates the
   MariaDB SSL certs, but if you bring the stack up before it finishes
   and `mysql` starts looking for them, you can get a boot loop.
@@ -193,3 +219,8 @@ procedure. Don't edit vendored files outside a sync PR; use
   `127.0.0.1:80`. The DB editor uses 8080 instead to avoid this. If
   you stop caddy and want to move the editor back, change
   `DBWEB_SERVER_PORT` in `.env`.
+- **Recast `-Werror=All` build failure:** fixed by our local patch in
+  `docker/containers/eq2emu-server/install.sh`. See
+  `docker/README.md` under "Local patches" for context. Without the
+  patch, modern GCC rejects a malformed flag from premake5 and the
+  `eq2world` binary fails to link.
