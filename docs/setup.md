@@ -49,7 +49,12 @@ You will need 10 unique passwords:
 - `MARIADB_ROOT_PASSWORD`
 - `EQ2LS_DB_PASSWORD`
 - `EQ2DAWN_DB_PASSWORD`
-- `WORLD_ACCOUNT_PASSWORD`
+- `WORLD_ACCOUNT_PASSWORD` — **must be ≤30 chars.** Upstream's world
+  server silently truncates this to 30 chars before hashing, so a
+  48-char default would mismatch the DB hash and world→login auth
+  would fail ("Bad password" in `eq2world.log`). Use
+  `openssl rand -hex 14` (28 chars). See `docker/.env.example` for
+  the comment flagging this constraint.
 - `EQ2DAWN_ADMIN_PASSWORD`
 - `EQ2WORLD_WEB_PASSWORD`
 - `EQ2LOGIN_WEB_PASSWORD`
