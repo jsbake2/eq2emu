@@ -49,6 +49,9 @@ Thumbs.db
 .vscode/
 *~
 
+# Claude Code session state
+.claude/
+
 # Build artifacts
 build/
 dist/

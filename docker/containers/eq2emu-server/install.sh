@@ -11,6 +11,13 @@ if [ ! -e $CONTAINER_ALREADY_STARTED ]; then
 	cp premake5 recastnavigation/RecastDemo
 	cd recastnavigation/RecastDemo
 	./premake5 gmake2
+	# ### LOCAL PATCH: premake5 v5.0.0-beta2 emits "-Werror=All" (capital A)
+	# into generated makefiles. Modern GCC rejects it ("no option '-WAll'"),
+	# which breaks the Recast build and cascades into an unlinkable eq2world.
+	# Stripping the flag keeps warnings visible but non-fatal. Remove this
+	# patch once premake5 or recastnavigation upstream fixes the flag.
+	# Tracked in docker/README.md under "Local patches".
+	sed -i 's/-Werror=All//g' Build/gmake2/*.make
 	cd Build/gmake2
 	make
 	cd /eq2emu

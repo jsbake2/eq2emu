@@ -54,7 +54,7 @@ To sync from upstream later:
 
 ## Local changes
 
-Changes we make to the stack live in two places only:
+Changes we make to the stack live in two places:
 
 - **`docker-compose.override.yaml`** — for compose-level tweaks (port
   bindings, volume relocations, resource limits). Uses Compose v2's
@@ -67,3 +67,18 @@ Changes we make to the stack live in two places only:
 If you find yourself wanting to edit `docker-compose.yaml` directly,
 stop and either (a) move the change to the override, or (b) open a PR
 upstream.
+
+## Local patches
+
+Changes that cannot be expressed via override or `.env` — because they
+touch build scripts copied into the image — live as in-place edits to
+vendored files, clearly marked. Each one is a candidate for either an
+upstream PR or removal once upstream catches up.
+
+| File | Marker | Why |
+| --- | --- | --- |
+| `containers/eq2emu-server/install.sh` | `### LOCAL PATCH:` | premake5 beta2 emits `-Werror=All` (capital A) in Recast's generated makefile; modern GCC rejects it and the Recast build fails, which cascades into an unlinkable `eq2world`. We `sed` the bad flag out after `premake5 gmake2`. |
+
+During an upstream sync, grep for `### LOCAL PATCH:` in the diff and
+re-apply each one. If upstream fixes the underlying issue, drop our
+patch and update this table.
