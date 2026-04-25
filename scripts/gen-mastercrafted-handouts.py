@@ -1,30 +1,29 @@
 #!/usr/bin/env python3
 """
 Generate docs/mastercrafted-handouts.html — a searchable, click-to-copy
-catalog of mastercrafted gear and crafted consumables, so GM Jason can copy
-a single /summonitem command and paste it into the EQ2 client (which
-accepts one command per chat input).
+catalog of crafted items, so GM Jason can copy a single /summonitem command
+and paste it into the EQ2 client (which accepts one command per chat input).
 
 Read-only against the live eq2emu DB. Credentials from docker/.env.
 
-Mastercrafted gear filter:
-  * Items with name LIKE 'Imbued <material> ...' where <material> is in the
-    hand-curated KEEP_MATERIALS_BY_BAND allowlist. The DB has no reliable
-    mastercrafted/handcrafted flag (every crafted item rolls up to
-    items.tier=3 regardless of quality), so the operator marked which
-    per-tier materials are real mastercrafted vs handcrafted-imbued.
-  * Item types: Weapon, Armor, Shield, Ranged, Bauble.
-  * Dedup: id < 10_000_000 only; further deduped by LOWER(name) keeping
-    the lowest id.
-  * Capped at MAX_LEVEL (matches R_Player/MaxLevel on the live server).
+The DB has no reliable mastercrafted-vs-handcrafted flag (every crafted
+item rolls up to items.tier=3 regardless of quality), so the catalog ships
+*everything* crafted and uses the live HTML search box for narrowing —
+type "imbued ebon" or "ruby" or "girdle" to shrink the list.
 
-Consumables: all crafted Food / Bauble / Thrown items, capped at MAX_LEVEL.
-No mastercrafted filter — there isn't a clean signal in the DB and excess
-food/totems is fine.
+Filters applied:
+  * crafted = 1, id < 10_000_000 (skip client-version duplicate IDs).
+  * Sub-quality prefixes (crude/shaped/forged/fashioned/tailored/blessed/
+    conditioned/pristine) dropped — only the final-quality output kept.
+  * Capped at MAX_LEVEL (matches R_Player/MaxLevel on the live server).
+  * Dedup by LOWER(name), keeping the lowest id.
+
+Sections:
+  * Gear: item_type in Weapon / Armor / Shield / Ranged / Bauble / Normal.
+  * Consumables: item_type in Food / Bauble / Thrown.
 """
 
 import html
-import json
 from collections import defaultdict
 from pathlib import Path
 
@@ -35,13 +34,14 @@ ENV = REPO / "docker" / ".env"
 OUT = REPO / "docs" / "mastercrafted-handouts.html"
 LEGACY_MD = REPO / "docs" / "mastercrafted-handouts.md"
 
-GEAR_TYPES = ("Weapon", "Armor", "Shield", "Ranged", "Bauble")
+GEAR_TYPES = ("Weapon", "Armor", "Shield", "Ranged", "Bauble", "Normal")
 GEAR_TYPE_DISPLAY = {
     "Weapon": "Weapons",
     "Armor": "Armor",
     "Shield": "Shields",
     "Ranged": "Ranged",
     "Bauble": "Baubles",
+    "Normal": "Jewelry / Belts / Cloaks",
 }
 CONS_DISPLAY = {"Food": "Food & drink", "Bauble": "Totems & baubles", "Thrown": "Arrows & thrown"}
 BAND_LABELS = [
@@ -56,20 +56,22 @@ BAND_LABELS = [
     (8, "Levels 80-89"),
     (9, "Levels 90+"),
 ]
-# Hand-curated rare-material allowlist per level band (keyed by band index;
-# band N covers levels N*10 to N*10+9). The DB has no clean mastercrafted
-# flag, so we list the actual mastercrafted rare materials per tier here.
-# Materials not listed are filtered out even if the auto-detector would
-# have included them (most often common-metal handcrafted-imbued items).
-# Source: operator (Jason) walked the auto-detected list and marked which
-# materials are real mastercrafted vs handcrafted.
-KEEP_MATERIALS_BY_BAND = {
-    0: {"bronze"},                          # T1 (lvl 1-9)
-    1: {"blackened", "bone", "cured"},      # T2 (lvl 10-19)
-    2: {"steel", "fir", "cuirboilli"},      # T3 (lvl 20-29)
-    3: {"feysteel", "oak", "engraved"},     # T4 (lvl 30-39)
-    4: {"ebon", "cedar", "augmented"},      # T5 (lvl 40-49)
-}
+# First-word prefixes that mark sub-quality (failed) crafted variants — drop
+# these regardless of material. The Pristine / unprefixed variant is the
+# final-quality output we want.
+SUBQUALITY_PREFIXES = {"crude", "shaped", "forged", "fashioned", "tailored",
+                       "blessed", "conditioned", "pristine"}
+
+# Operator's working notes on mastercrafted rare materials (kept here as
+# reference — not currently used to filter; the catalog ships everything
+# crafted and lets the live search filter visually):
+#   T1 jewelry gems: bronze (metal), copper (metal)
+#   T2: blackened (metal), bone, cured (leather), coral (gem for jewelry)
+#   T3: steel (metal), fir (wood), cuirboilli (leather), jasper (gem)
+#   T4: feysteel (metal), oak (wood), engraved, opal (gem)
+#   T5: ebon (metal), cedar (wood), augmented, ruby (gem)
+#   Belts: "Fortified Girdle of Dominance/Authority/Virtue/..." across T2-T5
+#   Traveler's Cloaks: ruckas/canvas (T3), cloth/broadcloth (T4)
 
 # Server R_Player/MaxLevel — cap the catalog to items a level-capped player
 # can actually use. Anything above this is hidden, including consumables.
@@ -109,7 +111,6 @@ def fetch_gear(cur):
         SELECT id, name, item_type, required_level, recommended_level
           FROM items
          WHERE crafted = 1 AND id < 10000000
-           AND name LIKE 'Imbued %'
            AND item_type IN ({",".join(f"'{t}'" for t in GEAR_TYPES)})
          ORDER BY id
     """
@@ -120,9 +121,8 @@ def fetch_gear(cur):
             continue
         if effective_level(r["required_level"], r["recommended_level"]) > MAX_LEVEL:
             continue
-        band = band_for(r["required_level"], r["recommended_level"])
-        material = key.split()[1] if len(key.split()) > 1 else ""
-        if material not in KEEP_MATERIALS_BY_BAND.get(band, set()):
+        parts = key.split()
+        if not parts or parts[0] in SUBQUALITY_PREFIXES:
             continue
         seen[key] = r
     return list(seen.values())
@@ -263,12 +263,12 @@ search.addEventListener('input', () => {
 """
 
 
-def render(gear_rows, consumable_rows, rare_by_band):
+def render(gear_rows, consumable_rows):
     gear_buckets = bucket(gear_rows)
     cons_buckets = bucket(consumable_rows)
 
     # nav
-    nav = ['<nav>', '<h1>Mastercrafted handouts</h1>',
+    nav = ['<nav>', '<h1>Crafted item catalog</h1>',
            '<input id="search" class="search" type="search" placeholder="Search items&hellip;">',
            '<span class="section-label">Gear</span>', '<ul>']
     for b, label in BAND_LABELS:
@@ -285,9 +285,10 @@ def render(gear_rows, consumable_rows, rare_by_band):
     nav.append('</ul></nav>')
 
     main = ['<main>', '<header class="page">',
-            '<h1>Mastercrafted handout catalog</h1>',
-            '<p>Click a copy button to put a single <code>/summonitem</code> command on your clipboard, '
-            'then paste into the EQ2 chat. Use the search box to filter by name.</p>',
+            '<h1>Crafted item catalog</h1>',
+            '<p>All crafted items in the DB at level &le; 50, deduped, sub-quality variants stripped. '
+            'Use the search box to narrow by name or item id, then click <em>copy</em> to put a single '
+            '<code>/summonitem</code> command on your clipboard and paste it into EQ2 chat.</p>',
             '<div class="hint">Other useful GM commands: '
             '<code>/giveitem &lt;player&gt; &lt;id&gt;</code> to hand to another player &middot; '
             '<code>/summonitem &lt;id&gt; 1 bank</code> to bank instead of bag &middot; '
@@ -328,13 +329,11 @@ def render(gear_rows, consumable_rows, rare_by_band):
             out.append('</section>')
         return out
 
-    main.extend(render_section("gear", "Mastercrafted gear", gear_buckets, GEAR_TYPES, GEAR_TYPE_DISPLAY))
-    main.extend(render_section("cons", "Crafted consumables", cons_buckets, ("Food", "Bauble", "Thrown"), CONS_DISPLAY))
+    main.extend(render_section("gear", "Gear", gear_buckets, GEAR_TYPES, GEAR_TYPE_DISPLAY))
+    main.extend(render_section("cons", "Consumables", cons_buckets, ("Food", "Bauble", "Thrown"), CONS_DISPLAY))
     main.append('</main>')
 
-    rare_summary = {b: sorted(list(v)) for b, v in rare_by_band.items()}
     body = ['<body>', '<div class="layout">'] + nav + main + ['</div>']
-    body.append(f'<!-- rare materials by band: {json.dumps(rare_summary)} -->')
     body.append(PAGE_SCRIPT)
     body.append('</body></html>')
     return PAGE_HEAD + "\n".join(body)
@@ -352,7 +351,7 @@ def main():
         cons_rows = fetch_consumables(cur)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(render(gear_rows, cons_rows, KEEP_MATERIALS_BY_BAND))
+    OUT.write_text(render(gear_rows, cons_rows))
     if LEGACY_MD.exists():
         LEGACY_MD.unlink()
     print(f"wrote {OUT} ({len(gear_rows)} gear, {len(cons_rows)} consumable, capped at lvl {MAX_LEVEL})")
