@@ -1,0 +1,53 @@
+diff --git a/source/WorldServer/Rules/Rules.cpp b/source/WorldServer/Rules/Rules.cpp
+index c91a0ce..8e8c6a9 100644
+--- a/source/WorldServer/Rules/Rules.cpp
++++ b/source/WorldServer/Rules/Rules.cpp
+@@ -403,6 +403,7 @@ void RuleManager::Init()
+ 	RULE_INIT(R_Spells, MinistrationPowerReductionSkill, "25"); // divides by integer value to establish how much skill req for higher power reduction
+ 	RULE_INIT(R_Spells, MasterSkillReduceSpellResist, "25"); // divides by integer value to establish how much skill bonus for reducing spell resistance on target
+ 	RULE_INIT(R_Spells, UseClassicSpellLevel, "0"); // Uses fractional spell levels (eg. you gain spells inbetween levels).
++	RULE_INIT(R_Spells, DefaultSpellGrantTier, "4"); // tier granted on auto-level-up spell awards. 1=Apprentice, 3=Adept, 4=Expert, 5=Master. Falls back to tier 1 if the higher tier is not in spell_tiers for that spell.
+ 	
+ 	RULE_INIT(R_Expansion, GlobalExpansionFlag, "0");
+ 	RULE_INIT(R_Expansion, GlobalHolidayFlag, "0");
+diff --git a/source/WorldServer/Rules/Rules.h b/source/WorldServer/Rules/Rules.h
+index de6e937..939efa6 100644
+--- a/source/WorldServer/Rules/Rules.h
++++ b/source/WorldServer/Rules/Rules.h
+@@ -245,6 +245,7 @@ enum RuleType {
+ 	MinistrationPowerReductionSkill,
+ 	MasterSkillReduceSpellResist,
+ 	UseClassicSpellLevel,
++	DefaultSpellGrantTier,
+ 
+ 	/* ZONE TIMERS */
+ 	RegenTimer,
+diff --git a/source/WorldServer/client.cpp b/source/WorldServer/client.cpp
+index 038d561..fe303a0 100644
+--- a/source/WorldServer/client.cpp
++++ b/source/WorldServer/client.cpp
+@@ -10538,14 +10538,21 @@ void Client::SendNewTSSpells(int8 class_id) {
+ void Client::AddSendNewSpells(vector<Spell*>* spells) {
+ 	Spell* spell = 0;
+ 	bool send_updates = false;
++	int8 preferred_tier = rule_manager.GetGlobalRule(R_Spells, DefaultSpellGrantTier)->GetInt8();
+ 	vector<Spell*>::iterator itr;
+ 	for (itr = spells->begin(); itr != spells->end(); itr++) {
+ 		spell = *itr;
+ 		if (spell && !player->HasSpell(spell->GetSpellID(), spell->GetSpellTier(), true) && spell->GetSpellData()->lua_script.length() > 0) {
++			Spell* granted = spell;
++			if (preferred_tier > spell->GetSpellTier()) {
++				Spell* upgraded = master_spell_list.GetSpell(spell->GetSpellID(), preferred_tier);
++				if (upgraded)
++					granted = upgraded;
++			}
+ 			send_updates = true;
+-			SendSpellUpdate(spell);
+-			player->AddSpellBookEntry(spell->GetSpellID(), spell->GetSpellTier(), player->GetFreeSpellBookSlot(spell->GetSpellData()->spell_book_type), spell->GetSpellData()->spell_book_type, spell->GetSpellData()->linked_timer, true);
+-			player->UnlockSpell(spell);
++			SendSpellUpdate(granted);
++			player->AddSpellBookEntry(granted->GetSpellID(), granted->GetSpellTier(), player->GetFreeSpellBookSlot(granted->GetSpellData()->spell_book_type), granted->GetSpellData()->spell_book_type, granted->GetSpellData()->linked_timer, true);
++			player->UnlockSpell(granted);
+ 		}
+ 	}
+ 	if (send_updates) {
