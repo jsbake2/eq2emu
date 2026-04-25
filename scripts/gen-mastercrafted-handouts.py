@@ -227,7 +227,7 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 </head>
 """
 
-PAGE_SCRIPT = """\
+PAGE_SCRIPT = r"""\
 <script>
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('button.copy');
