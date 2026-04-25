@@ -54,6 +54,7 @@ docker exec docker-eq2emu-server-1 \
 
 ## Current patches
 
-- `0001-default-spell-grant-tier.patch` — adds `R_Spells/DefaultSpellGrantTier` rule (default 4 = Expert)
+- `0001-default-spell-grant-tier.patch` — adds `R_Spells/DefaultSpellGrantTier` rule (default 7 = Expert)
   and uses it in `Client::AddSendNewSpells` so level-up spell awards grant the higher tier when
-  available, falling back to tier 1.
+  available, falling back to tier 1. Tier mapping: 1-4 = Apprentice I-IV (4 also "Journeyman"),
+  5 = Adept, 7 = Expert (Adept III), 9 = Master I.

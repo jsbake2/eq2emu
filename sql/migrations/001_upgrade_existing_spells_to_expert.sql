@@ -1,63 +1,70 @@
 -- Migration: upgrade existing character spellbooks and new-character starter
--- spells from Apprentice (tier 1) to Expert (tier 4), to match the new
--- R_Spells/DefaultSpellGrantTier runtime default.
+-- spells to Expert (tier 7) to match the R_Spells/DefaultSpellGrantTier default.
+--
+-- Tier mapping in this DB (verified against item_details_skill scroll rows):
+--   1-4 = Apprentice I through IV  (4 is "Journeyman" in newer naming)
+--   5   = Adept / Adept I
+--   7   = Expert / Adept III
+--   9   = Master / Master I
 --
 -- Prereqs:
---   * Server binary built with the DefaultSpellGrantTier rule patch, so that
---     spells granted from this point forward also default to tier 4.
---   * Take a DB backup before running (see docs/operations.md once it exists,
---     or run: scripts/backup_db.py).
+--   * Server binary built with the DefaultSpellGrantTier rule patch so that
+--     spells granted from this point forward also default to tier 7.
+--   * DB backup before running (e.g. mysqldump character_spells starting_spells).
 --
 -- Scope:
---   * character_spells: every row at tier 1 is promoted to tier 4 IFF a row
---     for that spell_id exists in spell_tiers at tier 4. Spells with no
---     higher tier are left at tier 1 (matches the in-memory fallback).
+--   * character_spells: rows at tier 1 OR tier 4 are promoted to tier 7 IFF
+--     a row for that spell_id exists in spell_tiers at tier 7. Apprentice-only
+--     spells (harvesting, tradeskill verbs, archetype passives — most only
+--     have a tier-1 row) are left untouched.
 --   * starting_spells: same logic, so newly created characters also start
 --     at Expert.
---   * Apprentice-only passives (given_by_type SpellScroll, tradeskill spells,
---     etc.) intentionally not touched — this migration is only for the
---     auto-grant path.
+--   * The tier-4 clause catches rows set by an earlier (buggy) version of
+--     this migration that wrote tier 4 thinking it was Expert. Re-running the
+--     corrected migration is safe and idempotent.
+--   * Scroll-scribed, quest-rewarded, and GM-granted tiers are not touched.
 --
 -- Rollback: see DOWN section at bottom.
 --
--- Note: EQ2EMu does not run migrations automatically. Apply with:
---   docker compose exec mysql mysql -uroot -p"$MARIADB_ROOT_PASSWORD" eq2emu \
+-- Apply with:
+--   docker exec -i docker-eq2emu-server-1 \
+--     mysql -h mysql -uroot -p"$MARIADB_ROOT_PASSWORD" eq2emu \
 --     < sql/migrations/001_upgrade_existing_spells_to_expert.sql
 
 -- UP ------------------------------------------------------------------------
 
 START TRANSACTION;
 
--- Snapshot affected row counts for the operator (visible in mysql CLI output).
+-- Snapshot: rows this run will update (visible in mysql CLI output).
 SELECT
     (SELECT COUNT(*) FROM character_spells cs
-       WHERE cs.tier = 1
+       WHERE cs.tier IN (1, 4)
          AND EXISTS (SELECT 1 FROM spell_tiers st
-                       WHERE st.spell_id = cs.spell_id AND st.tier = 4)) AS character_rows_to_upgrade,
+                       WHERE st.spell_id = cs.spell_id AND st.tier = 7)) AS character_rows_to_upgrade,
     (SELECT COUNT(*) FROM starting_spells ss
-       WHERE ss.tier = 1
+       WHERE ss.tier IN (1, 4)
          AND EXISTS (SELECT 1 FROM spell_tiers st
-                       WHERE st.spell_id = ss.spell_id AND st.tier = 4)) AS starter_rows_to_upgrade;
+                       WHERE st.spell_id = ss.spell_id AND st.tier = 7)) AS starter_rows_to_upgrade;
 
 UPDATE character_spells cs
-   JOIN spell_tiers st ON st.spell_id = cs.spell_id AND st.tier = 4
-   SET cs.tier = 4
- WHERE cs.tier = 1;
+   JOIN spell_tiers st ON st.spell_id = cs.spell_id AND st.tier = 7
+   SET cs.tier = 7
+ WHERE cs.tier IN (1, 4);
 
 UPDATE starting_spells ss
-   JOIN spell_tiers st ON st.spell_id = ss.spell_id AND st.tier = 4
-   SET ss.tier = 4
- WHERE ss.tier = 1;
+   JOIN spell_tiers st ON st.spell_id = ss.spell_id AND st.tier = 7
+   SET ss.tier = 7
+ WHERE ss.tier IN (1, 4);
 
 COMMIT;
 
 -- DOWN ----------------------------------------------------------------------
--- Reverses the migration. Only run if you are certain no *legitimate* tier-4
--- grants have happened since the UP was applied — otherwise this will also
--- downgrade spells that the player earned at Expert the normal way. If in
--- doubt, restore from the pre-migration DB backup instead.
+-- Reverses the migration. Only safe if no *legitimately-earned* tier-7 grants
+-- have landed since the UP was applied — otherwise this will also downgrade
+-- spells the player earned at Expert the normal way. If in doubt, restore
+-- from the pre-migration DB backup instead.
 --
 -- START TRANSACTION;
--- UPDATE character_spells SET tier = 1 WHERE tier = 4;
--- UPDATE starting_spells  SET tier = 1 WHERE tier = 4;
+-- UPDATE character_spells SET tier = 1 WHERE tier = 7;
+-- UPDATE starting_spells  SET tier = 1 WHERE tier = 7;
 -- COMMIT;

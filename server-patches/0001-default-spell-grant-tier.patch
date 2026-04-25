@@ -1,12 +1,12 @@
 diff --git a/source/WorldServer/Rules/Rules.cpp b/source/WorldServer/Rules/Rules.cpp
-index c91a0ce..8e8c6a9 100644
+index c91a0ce..c869bf1 100644
 --- a/source/WorldServer/Rules/Rules.cpp
 +++ b/source/WorldServer/Rules/Rules.cpp
 @@ -403,6 +403,7 @@ void RuleManager::Init()
  	RULE_INIT(R_Spells, MinistrationPowerReductionSkill, "25"); // divides by integer value to establish how much skill req for higher power reduction
  	RULE_INIT(R_Spells, MasterSkillReduceSpellResist, "25"); // divides by integer value to establish how much skill bonus for reducing spell resistance on target
  	RULE_INIT(R_Spells, UseClassicSpellLevel, "0"); // Uses fractional spell levels (eg. you gain spells inbetween levels).
-+	RULE_INIT(R_Spells, DefaultSpellGrantTier, "4"); // tier granted on auto-level-up spell awards. 1=Apprentice, 3=Adept, 4=Expert, 5=Master. Falls back to tier 1 if the higher tier is not in spell_tiers for that spell.
++	RULE_INIT(R_Spells, DefaultSpellGrantTier, "7"); // tier granted on auto-level-up spell awards. Tier mapping: 1-4=Apprentice I-IV (4=Journeyman), 5=Adept, 7=Expert (Adept III), 9=Master I. Falls back to tier 1 if the preferred tier is not in spell_tiers for that spell.
  	
  	RULE_INIT(R_Expansion, GlobalExpansionFlag, "0");
  	RULE_INIT(R_Expansion, GlobalHolidayFlag, "0");
