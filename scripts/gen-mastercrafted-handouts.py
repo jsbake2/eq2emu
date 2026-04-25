@@ -8,18 +8,19 @@ accepts one command per chat input).
 Read-only against the live eq2emu DB. Credentials from docker/.env.
 
 Mastercrafted gear filter:
-  * Items with name LIKE 'Imbued <material> ...' where the material is one
-    of the per-tier rare materials. Rare materials are auto-detected per
-    level band: any (band, material) combination with >= 10 distinct items
-    is treated as a rare-mastercrafted material. Common-material imbued
-    items (e.g. plain iron, steel) sit at 3-6 per band and get filtered out.
+  * Items with name LIKE 'Imbued <material> ...' where <material> is in the
+    hand-curated KEEP_MATERIALS_BY_BAND allowlist. The DB has no reliable
+    mastercrafted/handcrafted flag (every crafted item rolls up to
+    items.tier=3 regardless of quality), so the operator marked which
+    per-tier materials are real mastercrafted vs handcrafted-imbued.
   * Item types: Weapon, Armor, Shield, Ranged, Bauble.
   * Dedup: id < 10_000_000 only; further deduped by LOWER(name) keeping
     the lowest id.
+  * Capped at MAX_LEVEL (matches R_Player/MaxLevel on the live server).
 
-Consumables: all crafted Food / Bauble / Thrown items (no mastercrafted
-filter — there isn't a clean signal in the DB and excess food/totems is
-fine).
+Consumables: all crafted Food / Bauble / Thrown items, capped at MAX_LEVEL.
+No mastercrafted filter — there isn't a clean signal in the DB and excess
+food/totems is fine.
 """
 
 import html
@@ -55,7 +56,24 @@ BAND_LABELS = [
     (8, "Levels 80-89"),
     (9, "Levels 90+"),
 ]
-RARE_MATERIAL_MIN_COUNT = 8
+# Hand-curated rare-material allowlist per level band (keyed by band index;
+# band N covers levels N*10 to N*10+9). The DB has no clean mastercrafted
+# flag, so we list the actual mastercrafted rare materials per tier here.
+# Materials not listed are filtered out even if the auto-detector would
+# have included them (most often common-metal handcrafted-imbued items).
+# Source: operator (Jason) walked the auto-detected list and marked which
+# materials are real mastercrafted vs handcrafted.
+KEEP_MATERIALS_BY_BAND = {
+    0: {"bronze"},                          # T1 (lvl 1-9)
+    1: {"blackened", "bone", "cured"},      # T2 (lvl 10-19)
+    2: {"steel", "fir", "cuirboilli"},      # T3 (lvl 20-29)
+    3: {"feysteel", "oak", "engraved"},     # T4 (lvl 30-39)
+    4: {"ebon", "cedar", "augmented"},      # T5 (lvl 40-49)
+}
+
+# Server R_Player/MaxLevel — cap the catalog to items a level-capped player
+# can actually use. Anything above this is hidden, including consumables.
+MAX_LEVEL = 50
 
 
 def load_env():
@@ -86,28 +104,7 @@ def fetch(cur, sql):
     return cur.fetchall()
 
 
-def detect_rare_materials(cur):
-    """Return {band: set(material)} for materials whose item count meets the
-    rare-mastercrafted threshold within their level band."""
-    sql = f"""
-        SELECT FLOOR(GREATEST(required_level, recommended_level) / 10) AS lvl_band,
-               LOWER(SUBSTRING_INDEX(SUBSTRING_INDEX(name, ' ', 2), ' ', -1)) AS material,
-               COUNT(DISTINCT LOWER(name)) AS c
-          FROM items
-         WHERE crafted = 1 AND id < 10000000
-           AND name LIKE 'Imbued %'
-           AND item_type IN ({",".join(f"'{t}'" for t in GEAR_TYPES)})
-         GROUP BY lvl_band, material
-        HAVING c >= {RARE_MATERIAL_MIN_COUNT}
-    """
-    rare = defaultdict(set)
-    for row in fetch(cur, sql):
-        band = int(row["lvl_band"]) if row["lvl_band"] is not None else 0
-        rare[min(9, band)].add(row["material"])
-    return rare
-
-
-def fetch_gear(cur, rare_by_band):
+def fetch_gear(cur):
     sql = f"""
         SELECT id, name, item_type, required_level, recommended_level
           FROM items
@@ -121,9 +118,11 @@ def fetch_gear(cur, rare_by_band):
         key = r["name"].lower()
         if key in seen:
             continue
+        if effective_level(r["required_level"], r["recommended_level"]) > MAX_LEVEL:
+            continue
         band = band_for(r["required_level"], r["recommended_level"])
         material = key.split()[1] if len(key.split()) > 1 else ""
-        if material not in rare_by_band.get(band, set()):
+        if material not in KEEP_MATERIALS_BY_BAND.get(band, set()):
             continue
         seen[key] = r
     return list(seen.values())
@@ -140,8 +139,11 @@ def fetch_consumables(cur):
     seen = {}
     for r in fetch(cur, sql):
         key = r["name"].lower()
-        if key not in seen:
-            seen[key] = r
+        if key in seen:
+            continue
+        if effective_level(r["required_level"], r["recommended_level"]) > MAX_LEVEL:
+            continue
+        seen[key] = r
     return list(seen.values())
 
 
@@ -346,16 +348,14 @@ def main():
         cursorclass=pymysql.cursors.DictCursor, charset="utf8mb4",
     )
     with conn.cursor() as cur:
-        rare_by_band = detect_rare_materials(cur)
-        gear_rows = fetch_gear(cur, rare_by_band)
+        gear_rows = fetch_gear(cur)
         cons_rows = fetch_consumables(cur)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(render(gear_rows, cons_rows, rare_by_band))
+    OUT.write_text(render(gear_rows, cons_rows, KEEP_MATERIALS_BY_BAND))
     if LEGACY_MD.exists():
         LEGACY_MD.unlink()
-    print(f"wrote {OUT} ({len(gear_rows)} gear, {len(cons_rows)} consumable)")
-    print(f"rare materials per band: {dict((b, sorted(v)) for b, v in rare_by_band.items())}")
+    print(f"wrote {OUT} ({len(gear_rows)} gear, {len(cons_rows)} consumable, capped at lvl {MAX_LEVEL})")
 
 
 if __name__ == "__main__":
