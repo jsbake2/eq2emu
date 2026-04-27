@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
 """
 Generate docs/mastercrafted-handouts.html — a searchable, click-to-copy
-catalog of crafted items, so GM Jason can copy a single /summonitem command
-and paste it into the EQ2 client (which accepts one command per chat input).
+catalog of mastercrafted items. Now supports a "give to <player>" target
+in the page header so the operator's GM client (running in a separate VM)
+can hand items to other players via /giveitem instead of /summonitem.
 
 Read-only against the live eq2emu DB. Credentials from docker/.env.
 
-The DB has no reliable mastercrafted-vs-handcrafted flag (every crafted
-item rolls up to items.tier=3 regardless of quality), so the catalog ships
-*everything* crafted and uses the live HTML search box for narrowing —
-type "imbued ebon" or "ruby" or "girdle" to shrink the list.
+Mastercrafted gear filter (the DB has no clean MC/HC flag, so we use a
+hand-curated material allowlist):
 
-Filters applied:
+  * Items where the material token (first word of name, or second word
+    after 'Imbued') is in KEEP_MATERIALS_BY_BAND for the item's level
+    band. The allowlist is the rare-harvest table from the EQ2 wiki,
+    cross-checked against EQ2Emu data — see KEEP_MATERIALS_BY_BAND below.
   * crafted = 1, id < 10_000_000 (skip client-version duplicate IDs).
   * Sub-quality prefixes (crude/shaped/forged/fashioned/tailored/blessed/
     conditioned/pristine) dropped — only the final-quality output kept.
   * Capped at MAX_LEVEL (matches R_Player/MaxLevel on the live server).
   * Dedup by LOWER(name), keeping the lowest id.
+
+Consumables: all crafted Food / Bauble / Thrown items, capped at
+MAX_LEVEL. No material filter — there isn't a clean mastercrafted signal
+for consumables in this DB, and excess food/totems is harmless.
 
 Sections:
   * Gear: item_type in Weapon / Armor / Shield / Ranged / Bauble / Normal.
@@ -62,20 +68,33 @@ BAND_LABELS = [
 SUBQUALITY_PREFIXES = {"crude", "shaped", "forged", "fashioned", "tailored",
                        "blessed", "conditioned", "pristine"}
 
-# Operator's working notes on mastercrafted rare materials (kept here as
-# reference — not currently used to filter; the catalog ships everything
-# crafted and lets the live search filter visually):
-#   T1 jewelry gems: bronze (metal), copper (metal)
-#   T2: blackened (metal), bone, cured (leather), coral (gem for jewelry)
-#   T3: steel (metal), fir (wood), cuirboilli (leather), jasper (gem)
-#   T4: feysteel (metal), oak (wood), engraved, opal (gem)
-#   T5: ebon (metal), cedar (wood), augmented, ruby (gem)
-#   Belts: "Fortified Girdle of Dominance/Authority/Virtue/..." across T2-T5
-#   Traveler's Cloaks: ruckas/canvas (T3), cloth/broadcloth (T4)
+# Mastercrafted rare-material allowlist per level band (band N covers levels
+# N*10 to N*10+9). Sourced from the EQ2 wiki "Rare Harvests by Tier" data
+# (https://scholey.org/EQ2/harvest2.html), cross-referenced against the
+# EQ2Emu items table to confirm prefix counts pair up. We include both
+# member of each rare-pair when the data shows two equally-populated
+# variants (xegonite/adamantine at T7, incarnadine/ferrite at T8) since
+# both came in as rare-tier in EQ2Emu's classic-era dataset.
+#
+# Categories per tier: 1-2 rare metals, 1 rare gemstone, 1 rare wood,
+# 1 rare leather pelt. Roots/loams/shrubs are alchemy/provisioning rares
+# and don't end up in gear item names so we omit them.
+KEEP_MATERIALS_BY_BAND = {
+    0: {"bronze", "copper", "alder", "waxed", "lapis"},                       # T1 (lvl 1-9)
+    1: {"blackened", "silver", "bone", "cured", "coral"},                     # T2 (lvl 10-19)
+    2: {"steel", "palladium", "fir", "cuirboilli", "jasper"},                 # T3 (lvl 20-29)
+    3: {"feysteel", "ruthenium", "oak", "engraved", "opal"},                  # T4 (lvl 30-39)
+    4: {"ebon", "rhodium", "cedar", "augmented", "ruby"},                     # T5 (lvl 40-49)
+    5: {"cobalt", "vanadium", "ironwood", "scaled", "pearl"},                 # T6 (lvl 50-59)
+    6: {"xegonite", "acrylia", "adamantine", "ebony", "rosewood",
+        "dragonhide", "moonstone"},                                           # T7 (lvl 60-69)
+    7: {"incarnadine", "tynnonium", "ferrite", "mahogany", "redwood",
+        "hidebound"},                                                         # T8 (lvl 70-79)
+}
 
 # Server R_Player/MaxLevel — cap the catalog to items a level-capped player
 # can actually use. Anything above this is hidden, including consumables.
-MAX_LEVEL = 50
+MAX_LEVEL = 80
 
 
 def load_env():
@@ -106,6 +125,18 @@ def fetch(cur, sql):
     return cur.fetchall()
 
 
+def material_word(name_lower):
+    """Extract the material token from a crafted item name. Names follow either
+    'Imbued <material> <slot...>' (charm-imbued mastercrafted) or
+    '<material> <slot...>' (plain mastercrafted)."""
+    parts = name_lower.split()
+    if not parts:
+        return ""
+    if parts[0] == "imbued" and len(parts) >= 2:
+        return parts[1]
+    return parts[0]
+
+
 def fetch_gear(cur):
     sql = f"""
         SELECT id, name, item_type, required_level, recommended_level
@@ -123,6 +154,10 @@ def fetch_gear(cur):
             continue
         parts = key.split()
         if not parts or parts[0] in SUBQUALITY_PREFIXES:
+            continue
+        band = band_for(r["required_level"], r["recommended_level"])
+        material = material_word(key)
+        if material not in KEEP_MATERIALS_BY_BAND.get(band, set()):
             continue
         seen[key] = r
     return list(seen.values())
@@ -191,10 +226,18 @@ header.page { position: sticky; top: 0; background: var(--bg); padding: 1rem 0; 
               border-bottom: 1px solid var(--border); }
 header.page h1 { margin: 0 0 .5rem; font-size: 1.3rem; }
 header.page p { margin: 0; color: var(--muted); font-size: .9rem; }
-.search { display: block; width: 100%; padding: .55rem .8rem; margin: .8rem 0 0;
+.search, .give-to { display: block; width: 100%; padding: .55rem .8rem; margin: .8rem 0 0;
           background: var(--card); color: var(--fg); border: 1px solid var(--border);
           border-radius: 6px; font-size: .95rem; }
-.search:focus { outline: none; border-color: var(--accent); }
+.search:focus, .give-to:focus { outline: none; border-color: var(--accent); }
+.give-to.set { border-color: var(--copied); }
+.target-row { display: grid; grid-template-columns: auto 1fr auto; gap: .5rem;
+              align-items: center; margin-top: .8rem; }
+.target-row label { color: var(--muted); font-size: .85rem; white-space: nowrap; }
+.target-row .give-to { margin-top: 0; }
+.target-row .target-mode { color: var(--muted); font-size: .75rem;
+                           font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.target-row .target-mode.give { color: var(--copied); }
 section.band { margin-top: 2rem; }
 section.band > h2 { margin: 0 0 .25rem; font-size: 1.1rem; color: var(--accent); }
 section.band > .band-meta { color: var(--muted); font-size: .85rem; margin-bottom: .8rem; }
@@ -229,10 +272,42 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 
 PAGE_SCRIPT = r"""\
 <script>
+const giveTo = document.getElementById('give-to');
+const targetMode = document.getElementById('target-mode');
+
+// Persist target across reloads so the operator doesn't retype every session.
+const SAVED_TARGET_KEY = 'mc_handout_target';
+const saved = localStorage.getItem(SAVED_TARGET_KEY);
+if (saved) giveTo.value = saved;
+
+function buildCommand(itemId) {
+  const player = giveTo.value.trim();
+  return player ? `/giveitem ${player} ${itemId}` : `/summonitem ${itemId}`;
+}
+
+function refreshTargetMode() {
+  const player = giveTo.value.trim();
+  if (player) {
+    targetMode.textContent = `→ /giveitem ${player}`;
+    targetMode.classList.add('give');
+    giveTo.classList.add('set');
+  } else {
+    targetMode.textContent = '→ /summonitem (self)';
+    targetMode.classList.remove('give');
+    giveTo.classList.remove('set');
+  }
+}
+
+giveTo.addEventListener('input', () => {
+  localStorage.setItem(SAVED_TARGET_KEY, giveTo.value);
+  refreshTargetMode();
+});
+refreshTargetMode();
+
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('button.copy');
   if (!btn) return;
-  const cmd = btn.dataset.cmd;
+  const cmd = buildCommand(btn.dataset.itemid);
   navigator.clipboard.writeText(cmd).then(() => {
     const original = btn.textContent;
     btn.textContent = 'copied!';
@@ -285,14 +360,22 @@ def render(gear_rows, consumable_rows):
     nav.append('</ul></nav>')
 
     main = ['<main>', '<header class="page">',
-            '<h1>Crafted item catalog</h1>',
-            '<p>All crafted items in the DB at level &le; 50, deduped, sub-quality variants stripped. '
-            'Use the search box to narrow by name or item id, then click <em>copy</em> to put a single '
-            '<code>/summonitem</code> command on your clipboard and paste it into EQ2 chat.</p>',
-            '<div class="hint">Other useful GM commands: '
-            '<code>/giveitem &lt;player&gt; &lt;id&gt;</code> to hand to another player &middot; '
-            '<code>/summonitem &lt;id&gt; 1 bank</code> to bank instead of bag &middot; '
-            '<code>/player coins add plat 100</code> for coin.</div>',
+            '<h1>Mastercrafted handout catalog</h1>',
+            '<p>Mastercrafted gear (rare-harvest crafted) and crafted consumables, deduped, '
+            f'capped at level {MAX_LEVEL}. Use the search box to narrow the list, set a player '
+            'name in <em>Give to</em> to switch the copy buttons from <code>/summonitem</code> '
+            'to <code>/giveitem &lt;player&gt;</code>, then click <em>copy</em> on any row.</p>',
+            '<div class="target-row">',
+            '<label for="give-to">Give to:</label>',
+            '<input id="give-to" class="give-to" type="text" '
+            'placeholder="leave blank to summon to yourself" '
+            'autocomplete="off" spellcheck="false">',
+            '<span id="target-mode" class="target-mode">→ /summonitem (self)</span>',
+            '</div>',
+            '<div class="hint">Tips: '
+            '<code>/summonitem &lt;id&gt; 1 bank</code> to drop into bank instead of bag &middot; '
+            '<code>/player coins add plat 100</code> for coin &middot; '
+            'item id is shown on the right of each row if you ever need to type the command by hand.</div>',
             '</header>']
 
     def render_section(prefix, label_root, buckets, type_order, type_display):
@@ -315,11 +398,10 @@ def render(gear_rows, consumable_rows):
                 for r in rows:
                     lvl = effective_level(r["required_level"], r["recommended_level"])
                     name = r["name"].strip()
-                    cmd = f"/summonitem {r['id']}"
                     search_blob = f'{name.lower()} {r["id"]} {typ.lower()}'
                     out.append(
                         f'<div class="item" data-search="{html.escape(search_blob, quote=True)}">'
-                        f'<button class="copy" data-cmd="{html.escape(cmd, quote=True)}" type="button">copy</button>'
+                        f'<button class="copy" data-itemid="{r["id"]}" type="button">copy</button>'
                         f'<span class="name">{html.escape(name)} '
                         f'<span class="lvl">&middot; lvl {lvl}</span></span>'
                         f'<span class="id">{r["id"]}</span>'
