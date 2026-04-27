@@ -1,0 +1,69 @@
+diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
+index ad311de..ae44730 100644
+--- a/source/WorldServer/Bots/Bot.cpp
++++ b/source/WorldServer/Bots/Bot.cpp
+@@ -5,11 +5,13 @@
+ #include "../WorldDatabase.h"
+ #include "../classes.h"
+ #include "../SpellProcess.h"
++#include "../Rules/Rules.h"
+ 
+ extern WorldDatabase database;
+ extern MasterSpellList master_spell_list;
+ extern World world;
+ extern Classes classes;
++extern RuleManager rule_manager;
+ 
+ Bot::Bot() : NPC() {
+ 	SetBrain(new BotBrain(this));
+@@ -162,6 +164,8 @@ void Bot::GetNewSpells() {
+ 	spells.insert(spells.end(), spells2->begin(), spells2->end());
+ 	spells.insert(spells.end(), spells3->begin(), spells3->end());
+ 
++	int8 preferred_tier = rule_manager.GetGlobalRule(R_Spells, DefaultSpellGrantTier)->GetInt8();
++
+ 	vector<Spell*>::iterator itr;
+ 	map<int32, int8>* spell_list = 0;
+ 	for (itr = spells.begin(); itr != spells.end(); itr++) {
+@@ -204,8 +208,12 @@ void Bot::GetNewSpells() {
+ 			spell_list = 0;
+ 			break;
+ 		}
+-		if (spell_list && spell_list->count((*itr)->GetSpellID()) == 0)
+-			(*spell_list)[(*itr)->GetSpellID()] = 1;
++		if (spell_list && spell_list->count((*itr)->GetSpellID()) == 0) {
++			int8 tier_to_use = 1;
++			if (preferred_tier > 1 && master_spell_list.GetSpell((*itr)->GetSpellID(), preferred_tier))
++				tier_to_use = preferred_tier;
++			(*spell_list)[(*itr)->GetSpellID()] = tier_to_use;
++		}
+ 	}
+ 
+ 	safe_delete(spells1);
+diff --git a/source/WorldServer/Bots/BotCommands.cpp b/source/WorldServer/Bots/BotCommands.cpp
+index 10934bb..3f1924a 100644
+--- a/source/WorldServer/Bots/BotCommands.cpp
++++ b/source/WorldServer/Bots/BotCommands.cpp
+@@ -545,13 +545,18 @@ void Commands::Command_Bot_Spawn(Client* client, Seperator* sep) {
+ 			bot->SetLevel(client->GetPlayer()->GetLevel());
+ 			bot->SetDifficulty(6);
+ 			bot->size = 32;
++			// Use the ChangeLevel formula at spawn so a freshly-summoned bot has
++			// stats comparable to a player of the same level (lvl 50 = ~5040 HP).
++			// Old: 25 * level + 1 (lvl 50 = 1251 HP) was unviable for raid roles.
+ 			if (bot->GetTotalHP() == 0) {
+-				bot->SetTotalHP(25 * bot->GetLevel() + 1);
+-				bot->SetHP(25 * bot->GetLevel() + 1);
++				int32 hp = bot->GetLevel() * bot->GetLevel() * 2 + 40;
++				bot->SetTotalHP(hp);
++				bot->SetHP(hp);
+ 			}
+ 			if (bot->GetTotalPower() == 0) {
+-				bot->SetTotalPower(25 * bot->GetLevel() + 1);
+-				bot->SetPower(25 * bot->GetLevel() + 1);
++				sint32 power = (sint32)(bot->GetLevel() * bot->GetLevel() * 2.1 + 45);
++				bot->SetTotalPower(power);
++				bot->SetPower(power);
+ 			}
+ 			bot->SetOwner(client->GetPlayer());
+ 			bot->UpdateWeapons();
