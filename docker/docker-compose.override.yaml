@@ -1,0 +1,23 @@
+###########################################################
+# Local overrides for the upstream eq2emu-docker stack.
+#
+# Compose loads docker-compose.override.yaml automatically when you run
+# `docker compose up` from this directory — no -f flag needed.
+#
+# Rules for edits here:
+# - Keep changes minimal; prefer .env for anything configurable
+# - Use `!reset` when you need to fully replace a list from upstream
+#   instead of appending to it
+# - Every change should have a comment explaining why
+###########################################################
+services:
+
+  # Upstream hardcodes the MariaDB port as "3306:3306", which binds to
+  # 0.0.0.0 and exposes the database on every host interface. We only
+  # want it reachable from this machine (docker exec, Python scripts,
+  # local DB GUI) — never from the LAN. `!override` replaces the
+  # upstream ports list entirely; `!reset` on its own would remove the
+  # key and leave mysql unpublished.
+  mysql:
+    ports: !override
+      - "127.0.0.1:3306:3306"

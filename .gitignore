@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.upstream-example
 
 # Backups and database dumps
 backups/
@@ -48,8 +49,19 @@ Thumbs.db
 .vscode/
 *~
 
+# Claude Code session state
+.claude/
+
 # Build artifacts
 build/
 dist/
 *.o
 *.so
+
+# Docker runtime state (eq2emu stack) — data, certs, and install markers are
+# created by `docker compose up` and must never be committed.
+docker/data/
+docker/certs/
+docker/install/
+docker/eq2emu-editor/
+docker/.env
