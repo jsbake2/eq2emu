@@ -64,3 +64,10 @@ docker exec docker-eq2emu-server-1 \
   formula already used by `Bot::ChangeLevel`. Also makes bots respect
   `R_Spells/DefaultSpellGrantTier` so their cast tier matches the player default
   (Expert by default, Apprentice fallback when the higher tier doesn't exist).
+- `0004-allow-all-expansions.patch` — removes the per-expansion client-version
+  gate in `WorldDatabase::GetZoneRequirements`. Upstream blocks zones with
+  `expansion_id >= 40` (RoK and beyond) from clients older than RoK's protocol
+  version; this friends-only server runs DoF-era v546 clients but wants
+  access to RoK / TSO / SF / DoV / CoE content that's already populated in
+  the DB. Rendering may be rough for some encounters but the operator chose
+  to find out empirically rather than stay locked to EoF.
