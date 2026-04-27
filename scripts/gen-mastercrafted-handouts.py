@@ -94,7 +94,7 @@ KEEP_MATERIALS_BY_BAND = {
 
 # Server R_Player/MaxLevel — cap the catalog to items a level-capped player
 # can actually use. Anything above this is hidden, including consumables.
-MAX_LEVEL = 80
+MAX_LEVEL = 60
 
 
 def load_env():
