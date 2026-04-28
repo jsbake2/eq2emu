@@ -22,6 +22,18 @@ nav a { color: var(--muted); text-decoration: none; }
 nav a:hover { color: var(--fg); }
 nav .section-label { color: var(--accent); font-weight: 600; margin-top: .9rem; display: block;
                      font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+details.nav-group { margin: .35rem 0; }
+details.nav-group > summary { list-style: none; cursor: pointer; padding: .25rem 0;
+                              color: var(--accent); font-weight: 600;
+                              font-size: .8rem; text-transform: uppercase;
+                              letter-spacing: .05em; user-select: none; }
+details.nav-group > summary::-webkit-details-marker { display: none; }
+details.nav-group > summary::before { content: '▸'; color: var(--muted); margin-right: .35rem;
+                                      display: inline-block; transition: transform .12s; }
+details.nav-group[open] > summary::before { transform: rotate(90deg); }
+.nav-count { color: var(--muted); font-weight: 400; font-size: .75rem;
+             margin-left: .25rem; text-transform: none; letter-spacing: 0; }
+details.nav-group > ul { padding-left: 1rem; }
 main { padding: 1rem 2rem 4rem; max-width: 1100px; }
 header.page { position: sticky; top: 0; background: var(--bg); padding: 1rem 0; z-index: 10;
               border-bottom: 1px solid var(--border); }
@@ -96,7 +108,8 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 <nav>
 <h1>Crafted item catalog</h1>
 <input id="search" class="search" type="search" placeholder="Search items&hellip;">
-<span class="section-label">Gear</span>
+<details class="nav-group">
+<summary>Gear <span class="nav-count">1329</span></summary>
 <ul>
 <li><a href="#gear-band-0">Levels 1-9 (102)</a></li>
 <li><a href="#gear-band-1">Levels 10-19 (212)</a></li>
@@ -105,8 +118,9 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 <li><a href="#gear-band-4">Levels 40-49 (259)</a></li>
 <li><a href="#gear-band-5">Levels 50-59 (257)</a></li>
 <li><a href="#gear-band-6">Levels 60-69 (1)</a></li>
-</ul>
-<span class="section-label">Consumables</span>
+</ul></details>
+<details class="nav-group">
+<summary>Consumables <span class="nav-count">2749</span></summary>
 <ul>
 <li><a href="#cons-band-0">Levels 1-9 (34)</a></li>
 <li><a href="#cons-band-1">Levels 10-19 (445)</a></li>
@@ -115,8 +129,9 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 <li><a href="#cons-band-4">Levels 40-49 (489)</a></li>
 <li><a href="#cons-band-5">Levels 50-59 (461)</a></li>
 <li><a href="#cons-band-6">Levels 60-69 (419)</a></li>
-</ul>
-<span class="section-label">Containers</span>
+</ul></details>
+<details class="nav-group">
+<summary>Containers <span class="nav-count">95</span></summary>
 <ul>
 <li><a href="#cont-band-0">Levels 1-9 (22)</a></li>
 <li><a href="#cont-band-1">Levels 10-19 (4)</a></li>
@@ -125,8 +140,9 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 <li><a href="#cont-band-4">Levels 40-49 (22)</a></li>
 <li><a href="#cont-band-5">Levels 50-59 (18)</a></li>
 <li><a href="#cont-band-6">Levels 60-69 (3)</a></li>
-</ul>
-<span class="section-label">Collections</span>
+</ul></details>
+<details class="nav-group">
+<summary>Collections <span class="nav-count">541</span></summary>
 <ul>
 <li><a href="#coll-cat-beetle">Beetle (4)</a></li>
 <li><a href="#coll-cat-bone-fragment">Bone Fragment (24)</a></li>
@@ -208,7 +224,7 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 <li><a href="#coll-cat-runnyeye-the-gathering">Runnyeye: The Gathering (5)</a></li>
 <li><a href="#coll-cat-sentinel-s-fate">Sentinel&#x27;s Fate (48)</a></li>
 <li><a href="#coll-cat-destiny-of-velious">Destiny of Velious (37)</a></li>
-</ul>
+</ul></details>
 </nav>
 <main>
 <header class="page">
@@ -6992,12 +7008,12 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 <div class="item" data-search="scratched bugbear bone 12002"><button class="copy" data-itemid="12002" type="button">copy</button><span class="name">scratched bugbear bone</span><span class="id">12002</span></div>
 <div class="item" data-search="shattered bugbear bone 12621"><button class="copy" data-itemid="12621" type="button">copy</button><span class="name">shattered bugbear bone</span><span class="id">12621</span></div>
 </div></section>
-<section class="coll" data-search="fae bones faydwer bones lvl 35 shattered fae bone 12647 scratched fae bone 12003 ancient fae bone 3848 bloody fae bone 4413 cracked fae bone 5568 decayed fae bone 6306 dirty fae bone 6461 diseased fae bone 6488 fossilized fae bone 7397 pristine fae bone 10781">
+<section class="coll" data-search="fae bones faydwer bones lvl 35 scratched fae bone 12003 ancient fae bone 3848 shattered fae bone 12647 bloody fae bone 4413 cracked fae bone 5568 decayed fae bone 6306 dirty fae bone 6461 diseased fae bone 6488 fossilized fae bone 7397 pristine fae bone 10781">
 <h4>Fae Bones <span class="lvl">&middot; lvl 35</span></h4>
 <div class="items">
-<div class="item" data-search="shattered fae bone 12647"><button class="copy" data-itemid="12647" type="button">copy</button><span class="name">shattered Fae bone</span><span class="id">12647</span></div>
 <div class="item" data-search="scratched fae bone 12003"><button class="copy" data-itemid="12003" type="button">copy</button><span class="name">scratched Fae bone</span><span class="id">12003</span></div>
 <div class="item" data-search="ancient fae bone 3848"><button class="copy" data-itemid="3848" type="button">copy</button><span class="name">ancient Fae bone</span><span class="id">3848</span></div>
+<div class="item" data-search="shattered fae bone 12647"><button class="copy" data-itemid="12647" type="button">copy</button><span class="name">shattered Fae bone</span><span class="id">12647</span></div>
 <div class="item" data-search="bloody fae bone 4413"><button class="copy" data-itemid="4413" type="button">copy</button><span class="name">bloody Fae bone</span><span class="id">4413</span></div>
 <div class="item" data-search="cracked fae bone 5568"><button class="copy" data-itemid="5568" type="button">copy</button><span class="name">cracked Fae bone</span><span class="id">5568</span></div>
 <div class="item" data-search="decayed fae bone 6306"><button class="copy" data-itemid="6306" type="button">copy</button><span class="name">decayed Fae bone</span><span class="id">6306</span></div>
@@ -8268,15 +8284,15 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 <div class="item" data-search="a broken piece of enamel 1287"><button class="copy" data-itemid="1287" type="button">copy</button><span class="name">a broken piece of enamel</span><span class="id">1287</span></div>
 <div class="item" data-search="a broken metal foot 1283"><button class="copy" data-itemid="1283" type="button">copy</button><span class="name">a broken metal foot</span><span class="id">1283</span></div>
 </div></section>
-<section class="coll" data-search="peacock club relics tradeskill lvl 80 peacock club envelope 10335 peacock club seal 10340 peacock club letterhead 10338 peacock club feather strands 10336 peacock club portrait 10339 peacock club lamp 10337">
+<section class="coll" data-search="peacock club relics tradeskill lvl 80 peacock club feather strands 10336 peacock club portrait 10339 peacock club lamp 10337 peacock club envelope 10335 peacock club seal 10340 peacock club letterhead 10338">
 <h4>Peacock Club Relics <span class="lvl">&middot; lvl 80</span></h4>
 <div class="items">
-<div class="item" data-search="peacock club envelope 10335"><button class="copy" data-itemid="10335" type="button">copy</button><span class="name">Peacock Club envelope</span><span class="id">10335</span></div>
-<div class="item" data-search="peacock club seal 10340"><button class="copy" data-itemid="10340" type="button">copy</button><span class="name">Peacock Club seal</span><span class="id">10340</span></div>
-<div class="item" data-search="peacock club letterhead 10338"><button class="copy" data-itemid="10338" type="button">copy</button><span class="name">Peacock Club letterhead</span><span class="id">10338</span></div>
 <div class="item" data-search="peacock club feather strands 10336"><button class="copy" data-itemid="10336" type="button">copy</button><span class="name">Peacock Club feather strands</span><span class="id">10336</span></div>
 <div class="item" data-search="peacock club portrait 10339"><button class="copy" data-itemid="10339" type="button">copy</button><span class="name">Peacock Club portrait</span><span class="id">10339</span></div>
 <div class="item" data-search="peacock club lamp 10337"><button class="copy" data-itemid="10337" type="button">copy</button><span class="name">Peacock Club lamp</span><span class="id">10337</span></div>
+<div class="item" data-search="peacock club envelope 10335"><button class="copy" data-itemid="10335" type="button">copy</button><span class="name">Peacock Club envelope</span><span class="id">10335</span></div>
+<div class="item" data-search="peacock club seal 10340"><button class="copy" data-itemid="10340" type="button">copy</button><span class="name">Peacock Club seal</span><span class="id">10340</span></div>
+<div class="item" data-search="peacock club letterhead 10338"><button class="copy" data-itemid="10338" type="button">copy</button><span class="name">Peacock Club letterhead</span><span class="id">10338</span></div>
 </div></section>
 <section class="coll" data-search="piano keys tradeskill lvl 80 blemished piano key 4353 chipped piano key 4952 cracked piano key 5590 flawed piano key 7327 scuffed piano key 12025">
 <h4>Piano Keys <span class="lvl">&middot; lvl 80</span></h4>
@@ -9024,11 +9040,11 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 <div class="item" data-search="norrathian ainure doll 10069"><button class="copy" data-itemid="10069" type="button">copy</button><span class="name">Norrathian Ainure Doll</span><span class="id">10069</span></div>
 <div class="item" data-search="norrathian rynara doll 10072"><button class="copy" data-itemid="10072" type="button">copy</button><span class="name">Norrathian Rynara Doll</span><span class="id">10072</span></div>
 </div></section>
-<section class="coll" data-search="guide doodads series five hold of prexus lvl 80 nimves&#x27; wild hydrangea 10058 yarlawion&#x27;s engineered snapping tulip 15602 kaukumu&#x27;s ode to cheese 8543 mairliana&#x27;s chaos rose 9279">
+<section class="coll" data-search="guide doodads series five hold of prexus lvl 80 yarlawion&#x27;s engineered snapping tulip 15602 nimves&#x27; wild hydrangea 10058 kaukumu&#x27;s ode to cheese 8543 mairliana&#x27;s chaos rose 9279">
 <h4>Guide Doodads Series Five <span class="lvl">&middot; lvl 80</span></h4>
 <div class="items">
-<div class="item" data-search="nimves&#x27; wild hydrangea 10058"><button class="copy" data-itemid="10058" type="button">copy</button><span class="name">Nimves&#x27; Wild Hydrangea</span><span class="id">10058</span></div>
 <div class="item" data-search="yarlawion&#x27;s engineered snapping tulip 15602"><button class="copy" data-itemid="15602" type="button">copy</button><span class="name">Yarlawion&#x27;s Engineered Snapping Tulip</span><span class="id">15602</span></div>
+<div class="item" data-search="nimves&#x27; wild hydrangea 10058"><button class="copy" data-itemid="10058" type="button">copy</button><span class="name">Nimves&#x27; Wild Hydrangea</span><span class="id">10058</span></div>
 <div class="item" data-search="kaukumu&#x27;s ode to cheese 8543"><button class="copy" data-itemid="8543" type="button">copy</button><span class="name">Kaukumu&#x27;s Ode to Cheese</span><span class="id">8543</span></div>
 <div class="item" data-search="mairliana&#x27;s chaos rose 9279"><button class="copy" data-itemid="9279" type="button">copy</button><span class="name">Mairliana&#x27;s Chaos Rose</span><span class="id">9279</span></div>
 </div></section>
@@ -9516,13 +9532,13 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 <div class="item" data-search="token of destruction 14506"><button class="copy" data-itemid="14506" type="button">copy</button><span class="name">Token of Destruction</span><span class="id">14506</span></div>
 <div class="item" data-search="token of agony 14503"><button class="copy" data-itemid="14503" type="button">copy</button><span class="name">Token of Agony</span><span class="id">14503</span></div>
 </div></section>
-<section class="coll" data-search="idols of lord venril sathir shadow odyssey lvl 82 sathirian idol of annexation 11935 sathirian idol of conquest 11936 sathirian idol of drusella sathir 11938 sathirian idol of devotion 11937 sathirian idol of lichdom 11939 sathirian idol of power 11940 sathirian idol of the arisen 11941 sathirian idol of the kunzar soldier 11942 sathirian idol of the unity campaign 11943 sathirian idol of the warrior-mage 11944">
+<section class="coll" data-search="idols of lord venril sathir shadow odyssey lvl 82 sathirian idol of annexation 11935 sathirian idol of conquest 11936 sathirian idol of devotion 11937 sathirian idol of drusella sathir 11938 sathirian idol of lichdom 11939 sathirian idol of power 11940 sathirian idol of the arisen 11941 sathirian idol of the kunzar soldier 11942 sathirian idol of the unity campaign 11943 sathirian idol of the warrior-mage 11944">
 <h4>Idols of Lord Venril Sathir <span class="lvl">&middot; lvl 82</span></h4>
 <div class="items">
 <div class="item" data-search="sathirian idol of annexation 11935"><button class="copy" data-itemid="11935" type="button">copy</button><span class="name">Sathirian Idol of Annexation</span><span class="id">11935</span></div>
 <div class="item" data-search="sathirian idol of conquest 11936"><button class="copy" data-itemid="11936" type="button">copy</button><span class="name">Sathirian Idol of Conquest</span><span class="id">11936</span></div>
-<div class="item" data-search="sathirian idol of drusella sathir 11938"><button class="copy" data-itemid="11938" type="button">copy</button><span class="name">Sathirian Idol of Drusella Sathir</span><span class="id">11938</span></div>
 <div class="item" data-search="sathirian idol of devotion 11937"><button class="copy" data-itemid="11937" type="button">copy</button><span class="name">Sathirian Idol of Devotion</span><span class="id">11937</span></div>
+<div class="item" data-search="sathirian idol of drusella sathir 11938"><button class="copy" data-itemid="11938" type="button">copy</button><span class="name">Sathirian Idol of Drusella Sathir</span><span class="id">11938</span></div>
 <div class="item" data-search="sathirian idol of lichdom 11939"><button class="copy" data-itemid="11939" type="button">copy</button><span class="name">Sathirian Idol of Lichdom</span><span class="id">11939</span></div>
 <div class="item" data-search="sathirian idol of power 11940"><button class="copy" data-itemid="11940" type="button">copy</button><span class="name">Sathirian Idol of Power</span><span class="id">11940</span></div>
 <div class="item" data-search="sathirian idol of the arisen 11941"><button class="copy" data-itemid="11941" type="button">copy</button><span class="name">Sathirian Idol of the Arisen</span><span class="id">11941</span></div>
@@ -10093,16 +10109,16 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 <div class="item" data-search="bloody dagger 4411"><button class="copy" data-itemid="4411" type="button">copy</button><span class="name">Bloody Dagger</span><span class="id">4411</span></div>
 <div class="item" data-search="tarnished candlestick 13822"><button class="copy" data-itemid="13822" type="button">copy</button><span class="name">Tarnished Candlestick</span><span class="id">13822</span></div>
 </div></section>
-<section class="coll" data-search="masks of the tallonites sentinel&#x27;s fate lvl 90 tallonite mask of the vigoth 13783 tallonite mask of the marus 13781 tallonite mask of the kage-zonn 13779 tallonite mask of the zonn 13784 tallonite mask of the trajin 13782 tallonite mask of the lozonn 13780 tallonite mask of the amahn 13778">
+<section class="coll" data-search="masks of the tallonites sentinel&#x27;s fate lvl 90 tallonite mask of the zonn 13784 tallonite mask of the trajin 13782 tallonite mask of the lozonn 13780 tallonite mask of the amahn 13778 tallonite mask of the vigoth 13783 tallonite mask of the marus 13781 tallonite mask of the kage-zonn 13779">
 <h4>Masks of the Tallonites <span class="lvl">&middot; lvl 90</span></h4>
 <div class="items">
-<div class="item" data-search="tallonite mask of the vigoth 13783"><button class="copy" data-itemid="13783" type="button">copy</button><span class="name">Tallonite mask of the Vigoth</span><span class="id">13783</span></div>
-<div class="item" data-search="tallonite mask of the marus 13781"><button class="copy" data-itemid="13781" type="button">copy</button><span class="name">Tallonite mask of the Marus</span><span class="id">13781</span></div>
-<div class="item" data-search="tallonite mask of the kage-zonn 13779"><button class="copy" data-itemid="13779" type="button">copy</button><span class="name">Tallonite mask of the Kage-Zonn</span><span class="id">13779</span></div>
 <div class="item" data-search="tallonite mask of the zonn 13784"><button class="copy" data-itemid="13784" type="button">copy</button><span class="name">Tallonite mask of the Zonn</span><span class="id">13784</span></div>
 <div class="item" data-search="tallonite mask of the trajin 13782"><button class="copy" data-itemid="13782" type="button">copy</button><span class="name">Tallonite mask of the Trajin</span><span class="id">13782</span></div>
 <div class="item" data-search="tallonite mask of the lozonn 13780"><button class="copy" data-itemid="13780" type="button">copy</button><span class="name">Tallonite mask of the Lozonn</span><span class="id">13780</span></div>
 <div class="item" data-search="tallonite mask of the amahn 13778"><button class="copy" data-itemid="13778" type="button">copy</button><span class="name">Tallonite mask of the Amahn</span><span class="id">13778</span></div>
+<div class="item" data-search="tallonite mask of the vigoth 13783"><button class="copy" data-itemid="13783" type="button">copy</button><span class="name">Tallonite mask of the Vigoth</span><span class="id">13783</span></div>
+<div class="item" data-search="tallonite mask of the marus 13781"><button class="copy" data-itemid="13781" type="button">copy</button><span class="name">Tallonite mask of the Marus</span><span class="id">13781</span></div>
+<div class="item" data-search="tallonite mask of the kage-zonn 13779"><button class="copy" data-itemid="13779" type="button">copy</button><span class="name">Tallonite mask of the Kage-Zonn</span><span class="id">13779</span></div>
 </div></section>
 <section class="coll" data-search="ning yun beads sentinel&#x27;s fate lvl 90 red porcelain bead 11344 yellow porcelain bead 15625 green porcelain bead 7937 blue porcelain bead 4444 orange porcelain bead 10192">
 <h4>Ning Yun Beads <span class="lvl">&middot; lvl 90</span></h4>
@@ -10255,14 +10271,14 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 </section>
 <section class="coll-cat" id="coll-cat-destiny-of-velious">
 <h3>Destiny of Velious <span class="lvl">(37 collections)</span></h3>
-<section class="coll" data-search="armor of the rime destiny of velious lvl 90 a frost-rimed ring 1752 a frost-rimed breastplate 1750 a frost-rimed sword 1753 a frost-rimed helmet 1751 a frost-rimed axe 1749">
+<section class="coll" data-search="armor of the rime destiny of velious lvl 90 a frost-rimed sword 1753 a frost-rimed helmet 1751 a frost-rimed axe 1749 a frost-rimed ring 1752 a frost-rimed breastplate 1750">
 <h4>Armor of the Rime <span class="lvl">&middot; lvl 90</span></h4>
 <div class="items">
-<div class="item" data-search="a frost-rimed ring 1752"><button class="copy" data-itemid="1752" type="button">copy</button><span class="name">A Frost-Rimed Ring</span><span class="id">1752</span></div>
-<div class="item" data-search="a frost-rimed breastplate 1750"><button class="copy" data-itemid="1750" type="button">copy</button><span class="name">A Frost-Rimed Breastplate</span><span class="id">1750</span></div>
 <div class="item" data-search="a frost-rimed sword 1753"><button class="copy" data-itemid="1753" type="button">copy</button><span class="name">A Frost-Rimed Sword</span><span class="id">1753</span></div>
 <div class="item" data-search="a frost-rimed helmet 1751"><button class="copy" data-itemid="1751" type="button">copy</button><span class="name">A Frost-Rimed Helmet</span><span class="id">1751</span></div>
 <div class="item" data-search="a frost-rimed axe 1749"><button class="copy" data-itemid="1749" type="button">copy</button><span class="name">A Frost-Rimed Axe</span><span class="id">1749</span></div>
+<div class="item" data-search="a frost-rimed ring 1752"><button class="copy" data-itemid="1752" type="button">copy</button><span class="name">A Frost-Rimed Ring</span><span class="id">1752</span></div>
+<div class="item" data-search="a frost-rimed breastplate 1750"><button class="copy" data-itemid="1750" type="button">copy</button><span class="name">A Frost-Rimed Breastplate</span><span class="id">1750</span></div>
 </div></section>
 <section class="coll" data-search="coldain relics destiny of velious lvl 90 coldain pick-axe 5432 coldain beard ring 5429 barrel of coldain ale 4135 velium war wolf choker 15199 ancient battlepriest helm 3835 ancient velium battle axe 3869 velium forging hammer 15194">
 <h4>Coldain Relics <span class="lvl">&middot; lvl 90</span></h4>
@@ -10308,12 +10324,12 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 <div class="item" data-search="iceweaver kromrif symbol 8207"><button class="copy" data-itemid="8207" type="button">copy</button><span class="name">Iceweaver Kromrif Symbol</span><span class="id">8207</span></div>
 <div class="item" data-search="stonecutter kromrif symbol 13381"><button class="copy" data-itemid="13381" type="button">copy</button><span class="name">Stonecutter Kromrif Symbol</span><span class="id">13381</span></div>
 </div></section>
-<section class="coll" data-search="kael drakkel workforce signets destiny of velious lvl 90 signet of the kael steward 12801 signet of the kael armorer 12795 signet of the kael mason 12800 signet of the kael blacksmith 12796 signet of the kael cooper 12797 signet of the kael ditcher 12798 signet of the kael herald 12799">
+<section class="coll" data-search="kael drakkel workforce signets destiny of velious lvl 90 signet of the kael armorer 12795 signet of the kael mason 12800 signet of the kael steward 12801 signet of the kael blacksmith 12796 signet of the kael cooper 12797 signet of the kael ditcher 12798 signet of the kael herald 12799">
 <h4>Kael Drakkel Workforce Signets <span class="lvl">&middot; lvl 90</span></h4>
 <div class="items">
-<div class="item" data-search="signet of the kael steward 12801"><button class="copy" data-itemid="12801" type="button">copy</button><span class="name">Signet of the Kael Steward</span><span class="id">12801</span></div>
 <div class="item" data-search="signet of the kael armorer 12795"><button class="copy" data-itemid="12795" type="button">copy</button><span class="name">Signet of the Kael Armorer</span><span class="id">12795</span></div>
 <div class="item" data-search="signet of the kael mason 12800"><button class="copy" data-itemid="12800" type="button">copy</button><span class="name">Signet of the Kael Mason</span><span class="id">12800</span></div>
+<div class="item" data-search="signet of the kael steward 12801"><button class="copy" data-itemid="12801" type="button">copy</button><span class="name">Signet of the Kael Steward</span><span class="id">12801</span></div>
 <div class="item" data-search="signet of the kael blacksmith 12796"><button class="copy" data-itemid="12796" type="button">copy</button><span class="name">Signet of the Kael Blacksmith</span><span class="id">12796</span></div>
 <div class="item" data-search="signet of the kael cooper 12797"><button class="copy" data-itemid="12797" type="button">copy</button><span class="name">Signet of the Kael Cooper</span><span class="id">12797</span></div>
 <div class="item" data-search="signet of the kael ditcher 12798"><button class="copy" data-itemid="12798" type="button">copy</button><span class="name">Signet of the Kael Ditcher</span><span class="id">12798</span></div>
@@ -10465,15 +10481,15 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 <div class="item" data-search="knotted storm giant beard 8629"><button class="copy" data-itemid="8629" type="button">copy</button><span class="name">Knotted Storm Giant Beard</span><span class="id">8629</span></div>
 <div class="item" data-search="tangled storm giant beard 13792"><button class="copy" data-itemid="13792" type="button">copy</button><span class="name">Tangled Storm Giant Beard</span><span class="id">13792</span></div>
 </div></section>
-<section class="coll" data-search="tales of drunder destiny of velious lvl 90 tales of drunder page 5 13721 tales of drunder page 3 13719 tales of drunder page 1 13717 tales of drunder page 6 13722 tales of drunder page 4 13720 tales of drunder page 2 13718">
+<section class="coll" data-search="tales of drunder destiny of velious lvl 90 tales of drunder page 6 13722 tales of drunder page 4 13720 tales of drunder page 2 13718 tales of drunder page 5 13721 tales of drunder page 3 13719 tales of drunder page 1 13717">
 <h4>Tales of Drunder <span class="lvl">&middot; lvl 90</span></h4>
 <div class="items">
-<div class="item" data-search="tales of drunder page 5 13721"><button class="copy" data-itemid="13721" type="button">copy</button><span class="name">Tales of Drunder Page 5</span><span class="id">13721</span></div>
-<div class="item" data-search="tales of drunder page 3 13719"><button class="copy" data-itemid="13719" type="button">copy</button><span class="name">Tales of Drunder Page 3</span><span class="id">13719</span></div>
-<div class="item" data-search="tales of drunder page 1 13717"><button class="copy" data-itemid="13717" type="button">copy</button><span class="name">Tales of Drunder Page 1</span><span class="id">13717</span></div>
 <div class="item" data-search="tales of drunder page 6 13722"><button class="copy" data-itemid="13722" type="button">copy</button><span class="name">Tales of Drunder Page 6</span><span class="id">13722</span></div>
 <div class="item" data-search="tales of drunder page 4 13720"><button class="copy" data-itemid="13720" type="button">copy</button><span class="name">Tales of Drunder Page 4</span><span class="id">13720</span></div>
 <div class="item" data-search="tales of drunder page 2 13718"><button class="copy" data-itemid="13718" type="button">copy</button><span class="name">Tales of Drunder Page 2</span><span class="id">13718</span></div>
+<div class="item" data-search="tales of drunder page 5 13721"><button class="copy" data-itemid="13721" type="button">copy</button><span class="name">Tales of Drunder Page 5</span><span class="id">13721</span></div>
+<div class="item" data-search="tales of drunder page 3 13719"><button class="copy" data-itemid="13719" type="button">copy</button><span class="name">Tales of Drunder Page 3</span><span class="id">13719</span></div>
+<div class="item" data-search="tales of drunder page 1 13717"><button class="copy" data-itemid="13717" type="button">copy</button><span class="name">Tales of Drunder Page 1</span><span class="id">13717</span></div>
 </div></section>
 <section class="coll" data-search="tales of eastern wastes destiny of velious lvl 90 tales of eastern wastes page 1 13724 tales of eastern wastes page 2 13725 tales of eastern wastes page 3 13726 tales of eastern wastes page 4 13727 tales of eastern wastes page 5 13728 tales of eastern wastes page 6 13729">
 <h4>Tales of Eastern Wastes <span class="lvl">&middot; lvl 90</span></h4>

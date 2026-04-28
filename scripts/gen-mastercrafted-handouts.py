@@ -287,6 +287,18 @@ nav a { color: var(--muted); text-decoration: none; }
 nav a:hover { color: var(--fg); }
 nav .section-label { color: var(--accent); font-weight: 600; margin-top: .9rem; display: block;
                      font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+details.nav-group { margin: .35rem 0; }
+details.nav-group > summary { list-style: none; cursor: pointer; padding: .25rem 0;
+                              color: var(--accent); font-weight: 600;
+                              font-size: .8rem; text-transform: uppercase;
+                              letter-spacing: .05em; user-select: none; }
+details.nav-group > summary::-webkit-details-marker { display: none; }
+details.nav-group > summary::before { content: '▸'; color: var(--muted); margin-right: .35rem;
+                                      display: inline-block; transition: transform .12s; }
+details.nav-group[open] > summary::before { transform: rotate(90deg); }
+.nav-count { color: var(--muted); font-weight: 400; font-size: .75rem;
+             margin-left: .25rem; text-transform: none; letter-spacing: 0; }
+details.nav-group > ul { padding-left: 1rem; }
 main { padding: 1rem 2rem 4rem; max-width: 1100px; }
 header.page { position: sticky; top: 0; background: var(--bg); padding: 1rem 0; z-index: 10;
               border-bottom: 1px solid var(--border); }
@@ -526,37 +538,54 @@ def render(gear_rows, consumable_rows, container_rows, collections):
     cons_buckets = bucket(consumable_rows)
     container_buckets = bucket(container_rows)
 
-    # nav
+    # nav — each group is a collapsible <details> block, closed by default.
     nav = ['<nav>', '<h1>Crafted item catalog</h1>',
-           '<input id="search" class="search" type="search" placeholder="Search items&hellip;">',
-           '<span class="section-label">Gear</span>', '<ul>']
-    for b, label in BAND_LABELS:
-        if b in gear_buckets:
-            total = sum(len(v) for v in gear_buckets[b].values())
-            nav.append(f'<li><a href="#gear-band-{b}">{html.escape(label)} ({total})</a></li>')
-    nav.append('</ul>')
-    nav.append('<span class="section-label">Consumables</span>')
-    nav.append('<ul>')
-    for b, label in BAND_LABELS:
-        if b in cons_buckets:
-            total = sum(len(v) for v in cons_buckets[b].values())
-            nav.append(f'<li><a href="#cons-band-{b}">{html.escape(label)} ({total})</a></li>')
-    nav.append('</ul>')
-    if container_buckets:
-        nav.append('<span class="section-label">Containers</span>')
+           '<input id="search" class="search" type="search" placeholder="Search items&hellip;">']
+
+    def open_group(label, total):
+        nav.append('<details class="nav-group">')
+        nav.append(f'<summary>{html.escape(label)} '
+                   f'<span class="nav-count">{total}</span></summary>')
         nav.append('<ul>')
+
+    def close_group():
+        nav.append('</ul></details>')
+
+    if gear_buckets:
+        gear_total = sum(sum(len(v) for v in band.values()) for band in gear_buckets.values())
+        open_group("Gear", gear_total)
+        for b, label in BAND_LABELS:
+            if b in gear_buckets:
+                total = sum(len(v) for v in gear_buckets[b].values())
+                nav.append(f'<li><a href="#gear-band-{b}">{html.escape(label)} ({total})</a></li>')
+        close_group()
+
+    if cons_buckets:
+        cons_total = sum(sum(len(v) for v in band.values()) for band in cons_buckets.values())
+        open_group("Consumables", cons_total)
+        for b, label in BAND_LABELS:
+            if b in cons_buckets:
+                total = sum(len(v) for v in cons_buckets[b].values())
+                nav.append(f'<li><a href="#cons-band-{b}">{html.escape(label)} ({total})</a></li>')
+        close_group()
+
+    if container_buckets:
+        cont_total = sum(sum(len(v) for v in band.values()) for band in container_buckets.values())
+        open_group("Containers", cont_total)
         for b, label in BAND_LABELS:
             if b in container_buckets:
                 total = sum(len(v) for v in container_buckets[b].values())
                 nav.append(f'<li><a href="#cont-band-{b}">{html.escape(label)} ({total})</a></li>')
-        nav.append('</ul>')
+        close_group()
+
     if collections:
-        nav.append('<span class="section-label">Collections</span>')
-        nav.append('<ul>')
+        coll_total = sum(len(entries) for _, entries in collections)
+        open_group("Collections", coll_total)
         for cat, entries in collections:
             anchor = "coll-cat-" + re.sub(r'[^a-z0-9]+', '-', cat.lower()).strip('-')
             nav.append(f'<li><a href="#{anchor}">{html.escape(cat)} ({len(entries)})</a></li>')
-        nav.append('</ul>')
+        close_group()
+
     nav.append('</nav>')
 
     main = ['<main>', '<header class="page">',
