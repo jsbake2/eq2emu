@@ -66,16 +66,34 @@ if [ "$PATCHED_MTIME" -gt "$BINARY_MTIME" ]; then
 
     echo "==> hot-swapping eq2world"
     STAMP="$(date +%Y%m%d-%H%M%S)"
-    docker exec "$SERVER_CONTAINER" sh -c "
+    OLD_PID="$(docker exec "$SERVER_CONTAINER" sh -c 'pidof eq2world || true' | tr -d '[:space:]')"
+    # `mv` (not `cp`) the running binary out of the path: the kernel keeps
+    # the old inode for the running process, but the path becomes free for
+    # the new binary. A `cp` would leave the path occupied and the next
+    # `cp` of the new binary would hit ETXTBSY ("Text file busy").
+    # `sh -e` so any failure aborts BEFORE we kill the running process —
+    # otherwise we'd end up with no binary at the path and Dawn looping.
+    # `pkill -x eq2world` (NOT `-f './eq2world'`) — `-f` matches the full
+    # cmdline, which would also match the sh running this heredoc (its
+    # argv contains the literal pattern), making pkill kill its own shell
+    # before `|| true` can swallow the failure. `-x` matches only the
+    # process name, hitting eq2world cleanly.
+    docker exec "$SERVER_CONTAINER" sh -e -c "
         cd $SERVER_DIR &&
-        cp eq2world eq2world.pre-up-$STAMP &&
+        mv eq2world eq2world.pre-up-$STAMP &&
         cp $SOURCE_DIR/WorldServer/eq2world eq2world &&
-        pkill -f './eq2world' || true
+        chmod +x eq2world &&
+        pkill -x eq2world || true
     "
 
-    echo "==> waiting for eq2world to come back"
+    echo "==> waiting for eq2world to come back (pre-swap pid was $OLD_PID)"
+    # Require a NEW pid (different from pre-swap) AND a fresh "Connected
+    # to LoginServer" line — otherwise "still up" right after `pkill`
+    # passes before Dawn has restarted the binary.
     until docker exec "$SERVER_CONTAINER" sh -c \
-        "pidof eq2world >/dev/null && grep -q 'Connected to LoginServer' $SERVER_DIR/logs/eq2world.log 2>/dev/null"; do
+        "NEW=\$(pidof eq2world 2>/dev/null); \
+         [ -n \"\$NEW\" ] && [ \"\$NEW\" != \"$OLD_PID\" ] && \
+         grep -q 'Connected to LoginServer' $SERVER_DIR/logs/eq2world.log"; do
         sleep 3
     done
 else
