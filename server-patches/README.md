@@ -81,3 +81,17 @@ docker exec docker-eq2emu-server-1 \
   spawn so it can't render or target the bot. Adds a `Player::SetSpawnMap`
   call immediately before `SendSpawn` to flip the state, matching the
   regular `CheckSendSpawnToClient` flow.
+- `0006-bot-follow-smoothing.patch` — fixes the out-of-combat follow yo-yo.
+  `BotBrain::Think` used `MaxCombatRange` (4.0) as both the follow trigger
+  and the engine's stop distance, causing rapid back-and-forth: chase →
+  reach 4 units → stop → player moves 5 units → chase again. Now triggers
+  chase only at `3 * MaxCombatRange` (12 units) and sets `m_followDistance`
+  to match so `MoveToLocation` doesn't bounce off the inner stop threshold.
+
+  Note: an earlier version of this patch also tried to move `HaltMovement()`
+  from the end of `Command_Bot_Spawn` to before `AddSpawn` to address
+  spawn-time wandering. That hit a crash because `Entity::HaltMovement`
+  unconditionally calls `RunToLocation`, which dereferences `GetZone()` —
+  a freshly-allocated bot has no zone yet. That reorder was reverted;
+  spawn-time wander remains a known minor issue and would need a
+  zone-aware halt or different defensive call to fix safely.
