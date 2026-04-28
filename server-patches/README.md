@@ -93,5 +93,26 @@ docker exec docker-eq2emu-server-1 \
   spawn-time wandering. That hit a crash because `Entity::HaltMovement`
   unconditionally calls `RunToLocation`, which dereferences `GetZone()` —
   a freshly-allocated bot has no zone yet. That reorder was reverted;
-  spawn-time wander remains a known minor issue and would need a
-  zone-aware halt or different defensive call to fix safely.
+  spawn-time wander is now addressed by 0007 instead.
+- `0007-bot-followups.patch` — five small bot QoL fixes:
+  1. **Spawn-time stationary-render**: initialize `appearance.pos.X2/Y2/Z2`
+     (and X3/Y3/Z3) to match X/Y/Z right after `SetLocation` in
+     `Command_Bot_Spawn` and `Command_Bot_Create`. The earlier `memset`
+     on `appearance` zeroed the next-position fields; without this the
+     spawn packet's `pos_next_x/y/z` is `(0,0,0)` and the client
+     extrapolates motion from spawn position toward the world origin —
+     bots appear to sprint off in a straight line on first render.
+  2. **`/bot summon` movement-state clear**: after teleporting a bot (or
+     all group bots) to the player, call `ClearRunningLocations()` and
+     set `following = false` so the bot doesn't immediately run back
+     to its pre-teleport destination.
+  3. **Post-combat follow target = owner**: `BotBrain::Think` previously
+     reused `GetFollowTarget()`, which `MoveCloser` repoints at the
+     combat target during fights. After the mob died the bot would keep
+     running toward the corpse. Now uses `GetOwner()` explicitly.
+  4. **3× bot mana regen**: in `Entity::SetRegenValues`, multiply the
+     final `power_regen` by 3 if `IsBot()`. Bots no longer OOM during
+     long fights when running their full spell rotation. Players and
+     regular NPCs unchanged.
+  5. **Silent casts**: removes the two `MessageGroup("I am casting ...")`
+     calls in `BotBrain` so bots don't spam group chat with every spell.

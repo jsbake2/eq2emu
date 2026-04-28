@@ -1,0 +1,110 @@
+diff --git a/source/WorldServer/Bots/BotBrain.cpp b/source/WorldServer/Bots/BotBrain.cpp
+--- a/source/WorldServer/Bots/BotBrain.cpp
++++ b/source/WorldServer/Bots/BotBrain.cpp
+@@ -41,8 +41,11 @@ void BotBrain::Think() {
+ 	if (Body->EngagedInCombat())
+ 		return;
+
+-	// Set target to owner
+-	Spawn* target = GetBody()->GetFollowTarget();
++	// Set target to owner. Use the owner explicitly rather than the cached
++	// follow target — during combat MoveCloser repoints the follow target at
++	// the mob, and after the mob dies the bot would otherwise keep running
++	// toward the corpse instead of returning to the player.
++	Spawn* target = (Spawn*)GetBody()->GetOwner();
+
+ 	if(target)
+ 	{
+@@ -150,9 +153,7 @@ bool BotBrain::ProcessSpell(Entity* target, float distance) {
+ 			int32 time = Timer::GetCurrentTime2() + (spell->CalculateRecastTimer(Body));
+ 			Body->SetRecast(spell, time);
+
+-			string str = "I am casting ";
+-			str += spell->GetName();
+-			Body->MessageGroup(str);
++			// announce-cast removed: too spammy in group chat
+ 		}
+ 		return true;
+ 	}
+@@ -194,9 +195,7 @@ bool BotBrain::ProcessOutOfCombatSpells() {
+ 			int32 time = Timer::GetCurrentTime2() + (spell->CalculateRecastTimer(Body));
+ 			Body->SetRecast(spell, time);
+
+-			string str = "I am casting ";
+-			str += spell->GetName();
+-			Body->MessageGroup(str);
++			// announce-cast removed: too spammy in group chat
+ 		}
+ 		return true;
+ 	}
+diff --git a/source/WorldServer/Bots/BotCommands.cpp b/source/WorldServer/Bots/BotCommands.cpp
+--- a/source/WorldServer/Bots/BotCommands.cpp
++++ b/source/WorldServer/Bots/BotCommands.cpp
+@@ -437,6 +437,16 @@ void Commands::Command_Bot_Create(Client* client, Seperator* sep) {
+ 			bot->SetSpawnOrigHeading(bot->GetHeading());
+ 			bot->SetLocation(client->GetPlayer()->GetLocation());
++
++			// Initialize destination/waypoint coords to match the spawn position.
++			// memset zeroed appearance.pos earlier; without this the client's spawn
++			// packet has pos_next_x/y/z = 0 and renders the bot sprinting toward
++			// the world origin in a straight line.
++			bot->appearance.pos.X2 = bot->appearance.pos.X;
++			bot->appearance.pos.Y2 = bot->appearance.pos.Y;
++			bot->appearance.pos.Z2 = bot->appearance.pos.Z;
++			bot->appearance.pos.X3 = bot->appearance.pos.X;
++			bot->appearance.pos.Y3 = bot->appearance.pos.Y;
++			bot->appearance.pos.Z3 = bot->appearance.pos.Z;
+ 			bot->SetInitialState(16512);
+ 			bot->SetModelType(id_list->at(0));
+ 			bot->SetAdventureClass(advClass);
+@@ -207,6 +217,10 @@ void Commands::Command_Bot(Client* client, Seperator* sep) {
+ 								member->SetX(player->GetX());
+ 								member->SetY(player->GetY());
+ 								member->SetZ(player->GetZ());
++								// Wipe stale movement state so the bot doesn't run back to where
++								// it was before the teleport. Brain re-evaluates next tick.
++								member->ClearRunningLocations();
++								member->following = false;
+ 								client->Message(CHANNEL_COLOR_YELLOW, "Summoning %s.", member->GetName());
+ 							}
+ 						}
+@@ -228,6 +242,8 @@ void Commands::Command_Bot(Client* client, Seperator* sep) {
+ 						bot->SetX(player->GetX());
+ 						bot->SetY(player->GetY());
+ 						bot->SetZ(player->GetZ());
++						bot->ClearRunningLocations();
++						bot->following = false;
+ 						client->Message(CHANNEL_COLOR_YELLOW, "Summoning %s.", bot->GetName());
+ 						return;
+ 					}
+@@ -570,6 +586,16 @@ void Commands::Command_Bot_Spawn(Client* client, Seperator* sep) {
+ 			bot->SetSpawnOrigHeading(bot->GetHeading());
+ 			bot->SetLocation(client->GetPlayer()->GetLocation());
++
++			// Initialize destination/waypoint coords to match the spawn position.
++			// memset zeroed appearance.pos earlier; without this the client's spawn
++			// packet has pos_next_x/y/z = 0 and renders the bot sprinting toward
++			// the world origin in a straight line.
++			bot->appearance.pos.X2 = bot->appearance.pos.X;
++			bot->appearance.pos.Y2 = bot->appearance.pos.Y;
++			bot->appearance.pos.Z2 = bot->appearance.pos.Z;
++			bot->appearance.pos.X3 = bot->appearance.pos.X;
++			bot->appearance.pos.Y3 = bot->appearance.pos.Y;
++			bot->appearance.pos.Z3 = bot->appearance.pos.Z;
+ 			bot->SetInitialState(16512);
+ 			bot->SetLevel(client->GetPlayer()->GetLevel());
+ 			bot->SetDifficulty(6);
+diff --git a/source/WorldServer/Entity.cpp b/source/WorldServer/Entity.cpp
+--- a/source/WorldServer/Entity.cpp
++++ b/source/WorldServer/Entity.cpp
+@@ -1893,6 +1893,11 @@ void Entity::SetRegenValues(int16 effective_level)
+ 		MStats.unlock();
+
++		// Bot mercenaries get 3x mana regen so they can sustain spell rotations
++		// during longer fights without OOMing. Players and regular NPCs unchanged.
++		if (IsBot())
++			temp = (sint16)(temp * 3);
++
+ 		GetInfoStruct()->set_power_regen(temp);
+ 	}
+ }
