@@ -1,0 +1,21 @@
+diff --git a/source/WorldServer/WorldDatabase.cpp b/source/WorldServer/WorldDatabase.cpp
+index ead8509..f6c19dd 100644
+--- a/source/WorldServer/WorldDatabase.cpp
++++ b/source/WorldServer/WorldDatabase.cpp
+@@ -3244,10 +3244,12 @@ bool WorldDatabase::GetZoneRequirements(const char* zoneName, sint16* minStatus,
+ 		*minLevel = levelMin;
+ 		*maxLevel = levelMax;
+ 
+-		if( expansion_id >= 40 ) // lowest client we support is RoK - exp04
+-			*minVersion = GetMinimumClientVersion(expansion_id);
+-		else
+-			*minVersion = 0;
++		// LOCAL: bypass expansion-pack version check on this private server.
++		// We're a friends-only server running DoF-era (v546) clients but want
++		// access to RoK+ zones; rendering may be rough on newer content with
++		// older clients but it's worth seeing what works empirically.
++		(void)expansion_id;
++		*minVersion = 0;
+ 
+ 		safe_delete_array(escaped);
+ 		return true;
