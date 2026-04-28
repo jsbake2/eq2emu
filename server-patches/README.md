@@ -58,3 +58,9 @@ docker exec docker-eq2emu-server-1 \
   and uses it in `Client::AddSendNewSpells` so level-up spell awards grant the higher tier when
   available, falling back to tier 1. Tier mapping: 1-4 = Apprentice I-IV (4 also "Journeyman"),
   5 = Adept, 7 = Expert (Adept III), 9 = Master I.
+- `0003-bot-raid-prep.patch` — bumps mercenary-bot HP/power formula at spawn time
+  from `25 * level + 1` (lvl-50 bot = 1,251 HP, way too low for a tank role) to
+  `level² * 2 + 40` (lvl-50 bot = 5,040 HP, comparable to a player), matching the
+  formula already used by `Bot::ChangeLevel`. Also makes bots respect
+  `R_Spells/DefaultSpellGrantTier` so their cast tier matches the player default
+  (Expert by default, Apprentice fallback when the higher tier doesn't exist).
