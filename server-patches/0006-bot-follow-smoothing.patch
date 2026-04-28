@@ -1,0 +1,69 @@
+diff --git a/source/WorldServer/Bots/BotBrain.cpp b/source/WorldServer/Bots/BotBrain.cpp
+--- a/source/WorldServer/Bots/BotBrain.cpp
++++ b/source/WorldServer/Bots/BotBrain.cpp
+@@ -49,9 +49,17 @@ void BotBrain::Think() {
+ 		// Get distance from the owner
+ 		float distance = GetBody()->GetDistance(target);
+
+-		// If out of melee range then move closer
+-		if (distance > rule_manager.GetZoneRule(GetBody()->GetZoneID(), R_Combat, MaxCombatRange)->GetFloat())
++		// Looser out-of-combat follow distance (3x melee range) prevents
++		// yo-yo back-and-forth behavior — bot only chases when more than
++		// the comfort zone away, and SetFollowTarget gives the engine a
++		// matching stop threshold so MoveToLocation doesn't bounce.
++		float melee_range = rule_manager.GetZoneRule(GetBody()->GetZoneID(), R_Combat, MaxCombatRange)->GetFloat();
++		float follow_zone = melee_range * 3.0f;
++
++		if (distance > follow_zone) {
++			m_body->SetFollowTarget(target, (int32)follow_zone);
+ 			MoveCloser(target);
++		}
+ 	}
+ }
+
+diff --git a/source/WorldServer/Bots/BotCommands.cpp b/source/WorldServer/Bots/BotCommands.cpp
+--- a/source/WorldServer/Bots/BotCommands.cpp
++++ b/source/WorldServer/Bots/BotCommands.cpp
+@@ -448,6 +448,15 @@ void Commands::Command_Bot_Create(Client* client, Seperator* sep) {
+ 			}
+ 			bot->SetOwner(client->GetPlayer());
+ 			bot->GetNewSpells();
++
++			// Halt movement BEFORE entering the zone — otherwise a new bot
++			// occasionally wanders before the group invite locks it to follow.
++			// HaltMovement was previously called at the end of this block, after
++			// the zone had already ticked the bot at least once.
++			if (bot->IsNPC())
++				((NPC*)bot)->HaltMovement();
++			bot->ClearRunningLocations();
++
+ 			client->GetCurrentZone()->AddSpawn(bot);
+
+ 			if (sep->IsSet(1) && sep->IsNumber(1) && atoi(sep->arg[1]) == 1) {
+@@ -563,6 +572,15 @@ void Commands::Command_Bot_Spawn(Client* client, Seperator* sep) {
+ 			bot->UpdateWeapons();
+ 			bot->CalculateBonuses();
+ 			bot->GetNewSpells();
++
++			// Halt movement BEFORE entering the zone — otherwise a new bot
++			// occasionally wanders before the group invite locks it to follow.
++			// HaltMovement was previously called at the end of this block, after
++			// the zone had already ticked the bot at least once.
++			if (bot->IsNPC())
++				((NPC*)bot)->HaltMovement();
++			bot->ClearRunningLocations();
++
+ 			client->GetCurrentZone()->AddSpawn(bot);
+
+ 			if (sep->IsSet(1) && sep->IsNumber(1) && atoi(sep->arg[1]) == 1) {
+@@ -603,10 +621,6 @@ void Commands::Command_Bot_Spawn(Client* client, Seperator* sep) {
+ 			}
+
+ 			client->GetPlayer()->SpawnedBots[bot_id] = bot->GetID();
+-
+-			if(bot->IsNPC()) {
+-					((NPC*)bot)->HaltMovement();
+-			}
+ 		}
+ 		else {
+ 			client->Message(CHANNEL_ERROR, "Error spawning bot (%u)", bot_id);
