@@ -50,6 +50,8 @@ GEAR_TYPE_DISPLAY = {
     "Normal": "Jewelry / Belts / Cloaks",
 }
 CONS_DISPLAY = {"Food": "Food & drink", "Bauble": "Totems & baubles", "Thrown": "Arrows & thrown"}
+CONTAINER_TYPES = ("Bag", "House Container")
+CONTAINER_DISPLAY = {"Bag": "Bags & sacks", "House Container": "Strong boxes & chests"}
 BAND_LABELS = [
     (0, "Levels 1-9"),
     (1, "Levels 10-19"),
@@ -177,6 +179,33 @@ def fetch_consumables(cur):
         if key in seen:
             continue
         if effective_level(r["required_level"], r["recommended_level"]) > MAX_LEVEL:
+            continue
+        seen[key] = r
+    return list(seen.values())
+
+
+def fetch_containers(cur):
+    """Crafted bags + strong-box-style house containers. Most are level 0
+    (no level requirement), so the level cap doesn't filter much. No
+    material allowlist — bags follow material naming inconsistently and
+    the catalog should just show what's available."""
+    types_in = ",".join(f"'{t}'" for t in CONTAINER_TYPES)
+    sql = f"""
+        SELECT id, name, item_type, required_level, recommended_level
+          FROM items
+         WHERE crafted = 1 AND id < 10000000
+           AND item_type IN ({types_in})
+         ORDER BY id
+    """
+    seen = {}
+    for r in fetch(cur, sql):
+        key = r["name"].lower()
+        if key in seen:
+            continue
+        if effective_level(r["required_level"], r["recommended_level"]) > MAX_LEVEL:
+            continue
+        parts = key.split()
+        if not parts or parts[0] in SUBQUALITY_PREFIXES:
             continue
         seen[key] = r
     return list(seen.values())
@@ -338,9 +367,10 @@ search.addEventListener('input', () => {
 """
 
 
-def render(gear_rows, consumable_rows):
+def render(gear_rows, consumable_rows, container_rows):
     gear_buckets = bucket(gear_rows)
     cons_buckets = bucket(consumable_rows)
+    container_buckets = bucket(container_rows)
 
     # nav
     nav = ['<nav>', '<h1>Crafted item catalog</h1>',
@@ -357,7 +387,16 @@ def render(gear_rows, consumable_rows):
         if b in cons_buckets:
             total = sum(len(v) for v in cons_buckets[b].values())
             nav.append(f'<li><a href="#cons-band-{b}">{html.escape(label)} ({total})</a></li>')
-    nav.append('</ul></nav>')
+    nav.append('</ul>')
+    if container_buckets:
+        nav.append('<span class="section-label">Containers</span>')
+        nav.append('<ul>')
+        for b, label in BAND_LABELS:
+            if b in container_buckets:
+                total = sum(len(v) for v in container_buckets[b].values())
+                nav.append(f'<li><a href="#cont-band-{b}">{html.escape(label)} ({total})</a></li>')
+        nav.append('</ul>')
+    nav.append('</nav>')
 
     main = ['<main>', '<header class="page">',
             '<h1>Mastercrafted handout catalog</h1>',
@@ -413,6 +452,7 @@ def render(gear_rows, consumable_rows):
 
     main.extend(render_section("gear", "Gear", gear_buckets, GEAR_TYPES, GEAR_TYPE_DISPLAY))
     main.extend(render_section("cons", "Consumables", cons_buckets, ("Food", "Bauble", "Thrown"), CONS_DISPLAY))
+    main.extend(render_section("cont", "Containers", container_buckets, CONTAINER_TYPES, CONTAINER_DISPLAY))
     main.append('</main>')
 
     body = ['<body>', '<div class="layout">'] + nav + main + ['</div>']
@@ -431,12 +471,14 @@ def main():
     with conn.cursor() as cur:
         gear_rows = fetch_gear(cur)
         cons_rows = fetch_consumables(cur)
+        container_rows = fetch_containers(cur)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(render(gear_rows, cons_rows))
+    OUT.write_text(render(gear_rows, cons_rows, container_rows))
     if LEGACY_MD.exists():
         LEGACY_MD.unlink()
-    print(f"wrote {OUT} ({len(gear_rows)} gear, {len(cons_rows)} consumable, capped at lvl {MAX_LEVEL})")
+    print(f"wrote {OUT} ({len(gear_rows)} gear, {len(cons_rows)} consumable, "
+          f"{len(container_rows)} container, capped at lvl {MAX_LEVEL})")
 
 
 if __name__ == "__main__":
