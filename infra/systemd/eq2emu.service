@@ -1,0 +1,22 @@
+[Unit]
+Description=EQ2Emu server stack (docker compose + patched eq2world)
+Documentation=file:///home/jbaker/repos/eq2emu/docs/operations.md
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=jbaker
+Group=jbaker
+WorkingDirectory=/home/jbaker/repos/eq2emu
+ExecStart=/home/jbaker/repos/eq2emu/scripts/server-up.sh
+ExecStop=/home/jbaker/repos/eq2emu/scripts/server-down.sh
+TimeoutStartSec=600
+TimeoutStopSec=120
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
