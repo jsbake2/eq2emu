@@ -58,6 +58,13 @@ docker exec docker-eq2emu-server-1 \
   and uses it in `Client::AddSendNewSpells` so level-up spell awards grant the higher tier when
   available, falling back to tier 1. Tier mapping: 1-4 = Apprentice I-IV (4 also "Journeyman"),
   5 = Adept, 7 = Expert (Adept III), 9 = Master I.
+- `0002-server-keymap-persistence.patch` — persists the client's keymap (key remaps)
+  across logins. Upstream stubs the `OP_KeymapLoadMsg` / `OP_KeymapSaveMsg` handlers,
+  so every login resets remapped keys to defaults. This patch stores the client's
+  opaque save blob in a per-character `character_keymap` table (created by
+  `sql/002_character_keymap.sql`), and echoes it back during `SendZoneInfo()` so the
+  AoM-era client receives it as part of zone-in. Also handles explicit
+  `OP_KeymapLoadMsg` requests for client versions that ask for it.
 - `0003-bot-raid-prep.patch` — bumps mercenary-bot HP/power formula at spawn time
   from `25 * level + 1` (lvl-50 bot = 1,251 HP, way too low for a tank role) to
   `level² * 2 + 40` (lvl-50 bot = 5,040 HP, comparable to a player), matching the

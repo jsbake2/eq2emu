@@ -1,0 +1,103 @@
+From: jbaker
+Subject: [PATCH] Persist client keymap to character_keymap table
+
+The upstream server stubs the OP_KeymapLoadMsg / OP_KeymapSaveMsg handlers
+(login server has a "dunno what this is for" comment, world server has a
+commented-out placeholder blob), so key remaps are dropped at camp and the
+client reverts to defaults every login.
+
+This adds a round-trip: the client's opaque save blob is stored as-is in a
+per-character BLOB column, and echoed back unsolicited during SendZoneInfo()
+(matches the original commented placeholder's intent — the AoM-era client
+does not send OP_KeymapLoadMsg to the world server; it expects the data to
+arrive as part of zone-in).
+
+Also handles OP_KeymapLoadMsg → SendKeymapResponse() for safety / future
+client versions that do request explicitly.
+
+Requires character_keymap table (see sql/002_character_keymap.sql).
+
+Applies on top of UPSTREAM_BASE 6651d51 and the existing
+0001-default-spell-grant-tier patch.
+
+diff --git a/source/WorldServer/client.cpp b/source/WorldServer/client.cpp
+--- a/source/WorldServer/client.cpp
++++ b/source/WorldServer/client.cpp
+@@ -1067,12 +1067,37 @@ void Client::SendZoneInfo() {
+ 	QueuePacket(appB);
+ 	*/
+
++	SendKeymapResponse();
++
+ 	LogWrite(CCLIENT__DEBUG, 0, "Client", "SendFriendList");
+ 	SendFriendList();
+ 	LogWrite(CCLIENT__DEBUG, 0, "Client", "SendIgnoreList");
+ 	SendIgnoreList();
+ }
+
++void Client::SendKeymapResponse() {
++	if (GetCharacterID() == 0)
++		return;
++	Query q;
++	MYSQL_RES* result = q.RunQuery2(Q_SELECT, "SELECT data, data_size FROM character_keymap WHERE char_id = %u", GetCharacterID());
++	if (result) {
++		MYSQL_ROW row = mysql_fetch_row(result);
++		if (row && row[0]) {
++			unsigned long* lengths = mysql_fetch_lengths(result);
++			int32 data_len = (int32)(lengths ? lengths[0] : 0);
++			if (data_len > 0) {
++				EQ2Packet* app = new EQ2Packet(OP_KeymapDataMsg, (uchar*)row[0], data_len);
++				LogWrite(CCLIENT__DEBUG, 0, "Client", "SendKeymapResponse: sending OP_KeymapDataMsg (%u bytes) for char %u", data_len, GetCharacterID());
++				QueuePacket(app);
++				return;
++			}
++		}
++	}
++	EQ2Packet* app = new EQ2Packet(OP_KeymapNoneMsg, (uchar*)"", 0);
++	LogWrite(CCLIENT__DEBUG, 0, "Client", "SendKeymapResponse: sending OP_KeymapNoneMsg for char %u", GetCharacterID());
++	QueuePacket(app);
++}
++
+ void Client::SendDefaultGroupOptions() {
+ 	/*
+ 	0 - loot method
+@@ -2141,6 +2166,28 @@ bool Client::HandlePacket(EQApplicationPacket* app) {
+ 		HandleQuickbarUpdateRequest(app);
+ 		break;
+ 	}
++	case OP_KeymapSaveMsg: {
++		LogWrite(OPCODE__DEBUG, 1, "Opcode", "Opcode 0x%X (%i): OP_KeymapSaveMsg, size=%u", opcode, opcode, app->size);
++		if (GetCharacterID() && app->pBuffer && app->size > 0) {
++			std::string hex;
++			hex.reserve((size_t)app->size * 2);
++			static const char* _hexdigits = "0123456789ABCDEF";
++			for (int32 i = 0; i < app->size; i++) {
++				hex += _hexdigits[(app->pBuffer[i] >> 4) & 0xF];
++				hex += _hexdigits[app->pBuffer[i] & 0xF];
++			}
++			Query q;
++			q.AddQueryAsync(GetCharacterID(), &database, Q_REPLACE,
++				"REPLACE INTO character_keymap (char_id, data, data_size) VALUES (%u, UNHEX('%s'), %u)",
++				GetCharacterID(), hex.c_str(), app->size);
++		}
++		break;
++	}
++	case OP_KeymapLoadMsg: {
++		LogWrite(OPCODE__DEBUG, 1, "Opcode", "Opcode 0x%X (%i): OP_KeymapLoadMsg", opcode, opcode);
++		SendKeymapResponse();
++		break;
++	}
+ 	case OP_PredictionUpdateMsg: {
+ 		LogWrite(OPCODE__DEBUG, 7, "Opcode", "Opcode 0x%X (%i): OP_PredictionUpdateMsg from %s", opcode, opcode, GetPlayer()->GetName());
+ 		if (version <= 561 && GetPlayer() && GetPlayer()->GetZone()) {
+diff --git a/source/WorldServer/client.h b/source/WorldServer/client.h
+--- a/source/WorldServer/client.h
++++ b/source/WorldServer/client.h
+@@ -448,6 +448,7 @@ public:
+ 	void	SendChatRelationship(int8 type, const char* name);
+ 	void	SendFriendList();
+ 	void	SendIgnoreList();
++	void	SendKeymapResponse();
+ 	void	SendNewAdventureSpells();
+ 	void	SendNewTradeskillSpells();
+ 	string	GetCoinMessage(int32 total_coins);
