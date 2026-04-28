@@ -1,0 +1,43 @@
+diff --git a/source/WorldServer/SpellProcess.cpp b/source/WorldServer/SpellProcess.cpp
+index 5335893..f52878d 100644
+--- a/source/WorldServer/SpellProcess.cpp
++++ b/source/WorldServer/SpellProcess.cpp
+@@ -2428,6 +2428,30 @@ void SpellProcess::GetSpellTargets(LuaSpell* luaspell)
+ 				}
+ 				else if (caster->IsNPC()) // caster is NOT a player
+ 				{
++					// Bots are NPCs in a *player* group — fan friendly group-AE
++					// across the player group instead of looking for an NPC pack.
++					if (((Entity*)caster)->GetGroupMemberInfo()) {
++						world.GetGroupManager()->GroupLock(__FUNCTION__, __LINE__);
++						PlayerGroup* pgroup = world.GetGroupManager()->GetGroup(((Entity*)caster)->GetGroupMemberInfo()->group_id);
++						if (pgroup) {
++							pgroup->MGroupMembers.readlock(__FUNCTION__, __LINE__);
++							deque<GroupMemberInfo*>* members = pgroup->GetMembers();
++							for (deque<GroupMemberInfo*>::iterator itr = members->begin(); itr != members->end(); itr++) {
++								Entity* group_member = (*itr)->member;
++								if (!group_member || !group_member->Alive()) continue;
++								if (group_member->GetZone() != luaspell->caster->GetZone()) continue;
++								AddLuaSpellTarget(luaspell, group_member->GetID(), false);
++								if (group_member->HasPet()) {
++									Entity* pet = group_member->GetPet();
++									if (!pet) pet = group_member->GetCharmedPet();
++									if (pet) AddLuaSpellTarget(luaspell, pet->GetID(), false);
++								}
++							}
++							pgroup->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
++						}
++						world.GetGroupManager()->ReleaseGroupLock(__FUNCTION__, __LINE__);
++					}
++					else {
+ 					// caster is NPC and in a spawn group with other NPCs check FRIENDLY
+ 					vector<Spawn*>* group = ((NPC*)caster)->GetSpawnGroup();
+ 					if (group) 
+@@ -2455,6 +2479,7 @@ void SpellProcess::GetSpellTargets(LuaSpell* luaspell)
+ 						AddSelfAndPet(luaspell, caster);
+ 
+ 					safe_delete(group);
++					}
+ 				} // end is npc
+ 			} // end is friendly
+ 		} // end is Group AE
