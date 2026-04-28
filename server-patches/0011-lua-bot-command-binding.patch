@@ -1,0 +1,64 @@
+diff --git a/source/WorldServer/LuaFunctions.cpp b/source/WorldServer/LuaFunctions.cpp
+index d3dc213..3b511ff 100644
+--- a/source/WorldServer/LuaFunctions.cpp
++++ b/source/WorldServer/LuaFunctions.cpp
+@@ -22,6 +22,8 @@
+ #include "Spawn.h"
+ #include "WorldDatabase.h"
+ #include "LuaInterface.h"
++#include "Commands/Commands.h"
++#include "../common/seperator.h"
+ #include "../common/ConfigReader.h"
+ #include "client.h"
+ #include "World.h"
+@@ -14954,4 +14956,24 @@ int EQ2Emu_lua_RemoveSpell(lua_State* state) {
+ 		}
+ 	}
+ 	return 0;
+-}
+\ No newline at end of file
++}
++
++int EQ2Emu_lua_BotCommand(lua_State* state) {
++	// Lua signature: BotCommand(caster, "subcmd args")
++	// Dispatches into Commands::Command_Bot as if the caster typed
++	// "/bot <subcmd args>". Used by the bot-control spell pack so
++	// player abilities can drive /bot prepull, /bot camp all, etc.
++	if (!lua_interface)
++		return 0;
++	Spawn* caster = lua_interface->GetSpawn(state);
++	string subcmd = lua_interface->GetStringValue(state, 2);
++	lua_interface->ResetFunctionStack(state);
++	if (!caster || !caster->IsPlayer() || subcmd.empty())
++		return 0;
++	Client* client = caster->GetClient();
++	if (!client)
++		return 0;
++	Seperator sep(subcmd.c_str(), ' ', 5, 100, true);
++	commands.Command_Bot(client, &sep);
++	return 0;
++}
+diff --git a/source/WorldServer/LuaFunctions.h b/source/WorldServer/LuaFunctions.h
+index 1e48667..0cbe36b 100644
+--- a/source/WorldServer/LuaFunctions.h
++++ b/source/WorldServer/LuaFunctions.h
+@@ -238,6 +238,7 @@ int EQ2Emu_lua_AddPrimaryEntityCommand(lua_State* state);
+ int EQ2Emu_lua_AddSpellBookEntry(lua_State* state);
+ int EQ2Emu_lua_DeleteSpellBook(lua_State* state);
+ int EQ2Emu_lua_RemoveSpellBookEntry(lua_State* state);
++int EQ2Emu_lua_BotCommand(lua_State* state);
+ int EQ2Emu_lua_SendNewAdventureSpells(lua_State* state);
+ int EQ2Emu_lua_SendNewTradeskillSpells(lua_State* state);
+ int EQ2Emu_lua_HasSpell(lua_State* state);
+diff --git a/source/WorldServer/LuaInterface.cpp b/source/WorldServer/LuaInterface.cpp
+index 1ac81c4..09fc208 100644
+--- a/source/WorldServer/LuaInterface.cpp
++++ b/source/WorldServer/LuaInterface.cpp
+@@ -1394,6 +1394,7 @@ void LuaInterface::RegisterFunctions(lua_State* state) {
+ 	lua_register(state, "AddSpellBookEntry", EQ2Emu_lua_AddSpellBookEntry);
+ 	lua_register(state, "DeleteSpellBook", EQ2Emu_lua_DeleteSpellBook);
+ 	lua_register(state, "RemoveSpellBookEntry", EQ2Emu_lua_RemoveSpellBookEntry);
++	lua_register(state, "BotCommand", EQ2Emu_lua_BotCommand);
+ 	lua_register(state, "SendNewAdventureSpells", EQ2Emu_lua_SendNewAdventureSpells);
+ 	lua_register(state, "SendNewTradeskillSpells", EQ2Emu_lua_SendNewTradeskillSpells);
+ 	lua_register(state, "HasSpell", EQ2Emu_lua_HasSpell);
