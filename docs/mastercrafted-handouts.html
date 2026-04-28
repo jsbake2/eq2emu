@@ -59,6 +59,18 @@ button.copy { background: transparent; color: var(--accent); border: 1px solid v
 button.copy:hover { border-color: var(--accent); }
 button.copy.copied { color: var(--copied); border-color: var(--copied); }
 .empty { color: var(--muted); font-style: italic; padding: .5rem 0; }
+section.cheatsheet { margin-top: 2rem; padding: 1rem 1.2rem; background: var(--card);
+                     border-radius: 6px; border-left: 3px solid var(--accent); }
+section.cheatsheet h2 { margin: 0 0 .25rem; font-size: 1.05rem; color: var(--accent); }
+section.cheatsheet h3 { margin: 1rem 0 .35rem; font-size: .9rem; color: var(--fg);
+                        text-transform: uppercase; letter-spacing: .04em; }
+section.cheatsheet .cheat-meta { color: var(--muted); font-size: .85rem; margin: 0 0 .5rem; }
+.cheat-block { background: #16181c; padding: .55rem .8rem; border-radius: 4px;
+               font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+               font-size: .82rem; color: var(--fg); margin: 0; cursor: pointer;
+               border: 1px solid transparent; white-space: pre; overflow-x: auto; }
+.cheat-block:hover { border-color: var(--border); }
+.cheat-block.copied-line { border-color: var(--copied); }
 .hint  { background: #2a2e35; padding: .6rem .8rem; border-radius: 6px; margin: .8rem 0 0;
          border-left: 3px solid var(--accent); font-size: .85rem; }
 code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
@@ -114,8 +126,64 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 <input id="give-to" class="give-to" type="text" placeholder="leave blank to summon to yourself" autocomplete="off" spellcheck="false">
 <span id="target-mode" class="target-mode">→ /summonitem (self)</span>
 </div>
-<div class="hint">Tips: <code>/summonitem &lt;id&gt; 1 bank</code> to drop into bank instead of bag &middot; <code>/player coins add plat 100</code> for coin &middot; item id is shown on the right of each row if you ever need to type the command by hand.</div>
+<div class="hint">Tips: <code>/summonitem &lt;id&gt; 1 bank</code> to drop into bank instead of bag &middot; item id is shown on the right of each row if you ever need to type the command by hand &middot; see <a href="#cheatsheet">cheatsheet</a> below for other GM commands.</div>
 </header>
+
+<section id="cheatsheet" class="cheatsheet">
+  <h2>GM cheatsheet</h2>
+  <p class="cheat-meta">Common commands. Click any line to copy it to your clipboard.
+  Replace <code>&lt;target&gt;</code> with a player name when relevant.</p>
+
+  <h3>Self / progression</h3>
+  <pre class="cheat-block">/level 60                           # set adventure level (step 10 → 20 → target if &gt; 20)
+/setlevel 60                        # alias on some builds
+/reload rules                       # apply rule changes without restart</pre>
+
+  <h3>Coin</h3>
+  <pre class="cheat-block">/player coins add plat 100          # +100 platinum to self (or targeted player)
+/player coins add gold 50           # +50 gold
+/player coins add silver 250        # +250 silver
+/player coins add copper 1000       # +1000 copper</pre>
+
+  <h3>Items</h3>
+  <pre class="cheat-block">/summonitem &lt;id&gt;                    # spawn item into your bag
+/summonitem &lt;id&gt; 1 bank             # spawn item directly into your bank
+/giveitem &lt;target&gt; &lt;id&gt;             # hand item to another player by name
+/itemsearch &lt;name&gt;                  # find ids by name fragment</pre>
+
+  <h3>Travel</h3>
+  <pre class="cheat-block">/zone &lt;ZoneName&gt;                    # teleport into a zone (e.g. /zone GreaterFaydark)
+/zone list &lt;query&gt;                  # search known zones by name
+/goto &lt;target&gt;                      # teleport to a player or NPC by name</pre>
+
+  <h3>Bots</h3>
+  <pre class="cheat-block">/bot help race                      # in-game book of race IDs
+/bot help class                     # in-game book of class IDs
+/bot create &lt;race&gt; &lt;gender&gt; &lt;class&gt; &lt;name&gt;
+                                    # create — gender 0=female, 1=male
+/bot list                           # list your bots and their bot_ids
+/bot spawn &lt;bot_id&gt; 1                # summon + auto-invite to group (the trailing 1 matters)
+/bot camp                           # despawn the targeted bot
+/bot delete &lt;bot_id&gt;                # permanent delete
+/bot follow                         # target a bot, make it follow
+/bot stopfollow                     # target a bot, halt follow
+/bot summon                         # target a bot, teleport it to you
+/bot summon group                   # teleport every bot in your group to you
+/bot attack                         # target a mob, all bots engage it
+/bot maintank                       # target a player, designate as heal-priority
+/bot inv list / give &lt;id&gt; / remove &lt;slot&gt;
+                                    # bot inventory: target the bot first
+/bot settings helm | cloak | taunt | hood
+                                    # toggle bot visuals / behavior</pre>
+
+  <h3>Targeting / utility</h3>
+  <pre class="cheat-block">/target &lt;name&gt;                      # target a spawn or player by name
+/target_pet                         # target your pet (or pet's owner if pet)
+/who                                # who's online
+/whogroup                           # group roster
+/loc                                # show your coordinates</pre>
+</section>
+
 <section class="band" id="gear-band-0">
 <h2>Gear &mdash; Levels 1-9</h2>
 <div class="band-meta">102 items</div>
@@ -4663,14 +4731,35 @@ refreshTargetMode();
 
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('button.copy');
-  if (!btn) return;
-  const cmd = buildCommand(btn.dataset.itemid);
-  navigator.clipboard.writeText(cmd).then(() => {
-    const original = btn.textContent;
-    btn.textContent = 'copied!';
-    btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = original; btn.classList.remove('copied'); }, 900);
-  });
+  if (btn) {
+    const cmd = buildCommand(btn.dataset.itemid);
+    navigator.clipboard.writeText(cmd).then(() => {
+      const original = btn.textContent;
+      btn.textContent = 'copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = original; btn.classList.remove('copied'); }, 900);
+    });
+    return;
+  }
+  // Cheat-block click-to-copy: pick the clicked line, strip trailing comment.
+  const cheatBlock = e.target.closest('.cheat-block');
+  if (cheatBlock) {
+    const text = cheatBlock.textContent;
+    // Find which line the click landed on by Y-coordinate within the block.
+    const rect = cheatBlock.getBoundingClientRect();
+    const lineHeight = parseFloat(getComputedStyle(cheatBlock).lineHeight) || 16;
+    const padTop = parseFloat(getComputedStyle(cheatBlock).paddingTop) || 0;
+    const lineIndex = Math.floor((e.clientY - rect.top - padTop) / lineHeight);
+    const lines = text.split('\n');
+    let line = (lines[lineIndex] || '').trimEnd();
+    // Strip trailing "    # comment"
+    line = line.replace(/\s{2,}#.*$/, '').trim();
+    if (!line) return;
+    navigator.clipboard.writeText(line).then(() => {
+      cheatBlock.classList.add('copied-line');
+      setTimeout(() => cheatBlock.classList.remove('copied-line'), 700);
+    });
+  }
 });
 
 const search = document.getElementById('search');
