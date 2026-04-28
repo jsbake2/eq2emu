@@ -1,0 +1,21 @@
+diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
+index 5e5d32d..e9031b5 100644
+--- a/source/WorldServer/Bots/Bot.cpp
++++ b/source/WorldServer/Bots/Bot.cpp
+@@ -599,6 +599,16 @@ Spell* Bot::GetBuffSpell() {
+ 	for (itr = buff_spells.begin(); itr != buff_spells.end(); itr++) {
+ 		spell = master_spell_list.GetSpell(itr->first, itr->second);
+ 		if (spell && IsSpellReady(spell)) {
++			// Skip short-duration buffs out of combat — they're combat-tactical
++			// (Fervence, Sacred Armor, Fanaticism etc) and would churn every
++			// tick between fights. 600 = 60s in 0.1s units. duration_until_cancel
++			// and long-duration buffs cycle normally; the 'effect already up'
++			// check below keeps them from being re-cast while live.
++			int32 dur = spell->GetSpellData()->duration1;
++			bool short_buff = (dur > 0 && dur < 600 && !spell->GetSpellData()->duration_until_cancel);
++			if (short_buff)
++				continue;
++
+ 			target = 0;
+ 
+ 			if (spell->GetSpellData()->target_type == SPELL_TARGET_SELF)
