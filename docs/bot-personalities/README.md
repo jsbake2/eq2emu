@@ -165,11 +165,126 @@ seeds the DB from it.
    `Client::SendChannelMessage`; gate by chime_in_chance; build
    prompt; queue async; on result `MessageGroup`.
 6. **Idle hook.** Per-bot brain tick path.
-7. **Live tuning.** Ride along for a session, watch for: bots
+7. **Tool calling — natural-language commands.** See next section.
+8. **Live tuning.** Ride along for a session, watch for: bots
    talking over each other, off-character drift, latency spikes.
 
 Skip anything that requires real-time reactions — that's explicitly
 out of scope.
+
+## Tool calling — letting players direct bots in plain language
+
+Phase 7 adds a layer on top of the chat hook: instead of (or in
+addition to) replying in character, the LLM can decide a player
+message is a *command* and emit a structured tool call. The C++ side
+validates and executes.
+
+Use cases:
+
+- Player: *"Furious, cast pact of cheetah on me"* → bot finds the
+  matching spell in its `buff_spells` map, casts on speaker.
+- Player: *"Gapp, dance"* → `/dance` emote.
+- Player: *"could a healer get over here, I'm low"* → nearest
+  healer's `cast_spell(GetHealSpell)` or just `follow(speaker)`.
+- Player: *"Buffer, prepull"* → triggers the `/bot prepull` command
+  flow once that lands.
+
+### Toolset (starting set)
+
+```
+cast_spell(spell_name, target=speaker)
+  - fuzzy match spell_name against the bot's actual spell maps
+    (buff_spells + hot_ward_spells + dd_spells + ...). If no match
+    or bot doesn't have it yet at this level, decline in character.
+
+emote(name)
+  - whitelist: dance, wave, cheer, bow, salute, point, laugh, clap,
+    nod, shrug, sigh, sit, stand. Reject anything not in the list.
+
+follow(target=speaker)
+stop_follow()
+assist(target)
+  - thin wrappers over existing /bot follow / /bot stop / /bot
+    assist commands — these already exist in BotCommands.cpp.
+
+prepull()
+  - once Phase 2 of the bot-AI workstream lands, expose the
+    /bot prepull flow as a tool.
+```
+
+### Permission boundary
+
+- Owner can command their own bots.
+- Group leader can command everyone's bots in the group (toggleable
+  per-bot in `bot_persona.allow_group_leader_commands`, default on).
+- Other group members? No by default. Open it later if it feels
+  too restrictive.
+
+### Latency budget
+
+Tool calling needs reliable JSON output, which means an 8B+ model.
+Plan to swap from `llama3.2:3b` to `llama3.1:8b-instruct` once this
+phase starts — adds ~3-5GB RAM and ~1-2s per generate, but small
+models drop tool calls or hallucinate JSON shape.
+
+Round-trip target:
+1. Player message arrives → 0ms
+2. Regex first-pass for unambiguous commands (`bot cast X`,
+   `bot dance`) → near-zero, no LLM call
+3. LLM intent classification + tool selection → ~1-3s
+4. Tool execution → 0ms (server-side)
+5. Optional persona response in chat ("on it") → another ~1-3s
+
+Steps 3 and 5 should be the same generate call when possible —
+ask for "if this is a command, return JSON; otherwise return a
+chat reply" in one shot. Avoid the double round-trip.
+
+### Hybrid: regex first, LLM fallback
+
+Common commands have stable patterns:
+
+```
+\bbot\s+(\w+)\s+(?:cast|use)\s+(.+?)(?:\s+on\s+(\w+))?$
+\bbot\s+(\w+)\s+(dance|wave|cheer|bow)
+\bbot\s+(\w+)\s+(follow|stop|assist)\s*(\w+)?$
+@(\w+)\s+(buff|heal|cure)\s+me$
+```
+
+Hit a regex → bypass the LLM, execute directly, near-zero latency.
+Miss → send to LLM with the toolset and let it parse natural
+language. Cuts cost ~80% on a typical session.
+
+### Failure modes
+
+- **Spell not in list:** Bot says "I don't know that one yet"
+  in-character (regular persona LLM call).
+- **Spell on cooldown:** Bot says "give me a sec" or similar.
+- **Out of range:** Bot says "I need to be closer" — or, optionally,
+  auto-runs to range and casts (toggle).
+- **Ambiguous spell name:** Bot lists 2-3 candidates: "did you mean
+  Pact of the Cheetah, Pact of Nature, or Pact of the Wolf?"
+- **Permission denied:** Silent (don't broadcast denials in chat;
+  just no-op). Avoids griefing.
+
+### Schema additions
+
+```sql
+ALTER TABLE bot_persona
+  ADD COLUMN allow_group_leader_commands TINYINT DEFAULT 1,
+  ADD COLUMN tool_chance FLOAT DEFAULT 1.0;  -- always-on for owner;
+                                              -- sliding scale if you
+                                              -- want bots that "didn't
+                                              -- hear you" sometimes.
+```
+
+### Out of scope (still)
+
+- Acting on its own without being asked. Bots don't decide to cast
+  speed buffs because the group is moving.
+- Mid-combat tool calls. Latency is too high; combat AI stays
+  rules-based.
+- Cross-zone commands. Bot in a different zone can't be commanded
+  via chat — chat doesn't reach.
 
 ## Why not just hard-code lines
 
