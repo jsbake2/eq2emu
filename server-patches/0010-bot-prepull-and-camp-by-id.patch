@@ -1,0 +1,169 @@
+diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
+index ae44730..e62bc97 100644
+--- a/source/WorldServer/Bots/Bot.cpp
++++ b/source/WorldServer/Bots/Bot.cpp
+@@ -433,31 +433,41 @@ Spell* Bot::GetHoTWardSpell() {
+ 	if (!spell)
+ 		return 0;
+ 
+-	// There was a spell so find a group member that needs healing
+ 	int8 threshold = GetHealThreshold();
+ 	GroupMemberInfo* gmi = GetGroupMemberInfo();
+-	PlayerGroup* group = world.GetGroupManager()->GetGroup(gmi->group_id);
++	PlayerGroup* group = gmi ? world.GetGroupManager()->GetGroup(gmi->group_id) : nullptr;
+ 	if (group)
+ 	{
+ 		group->MGroupMembers.readlock(__FUNCTION__, __LINE__);
+ 		deque<GroupMemberInfo*>* members = group->GetMembers();
+ 
++		// Prepull mode: ward un-warded members regardless of HP.
++		if (m_forceWards) {
++			for (int8 i = 0; i < members->size(); i++) {
++				Entity* member = members->at(i)->member;
++				if (!member || !member->Alive()) continue;
++				if (member->GetSpellEffect(itr->first)) continue;  // already warded with this spell
++				SetTarget(member);
++				group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
++				return spell;
++			}
++			// Everyone has the highest-tier ward up — exit prepull mode.
++			m_forceWards = false;
++		}
++
++		// Reactive: heal a group member that's wounded but above the
++		// floor where straight heals take over.
+ 		for (int8 i = 0; i < members->size(); i++) {
+ 			Entity* member = members->at(i)->member;
+-			
+-			if(!member)
+-				continue;
+-			
++			if (!member) continue;
+ 			int8 percent = 0;
+ 			if (member->GetHP() > 0)
+ 				percent = (int8)(((float)member->GetHP() / member->GetTotalHP()) * 100);
+ 
+ 			if (percent <= 99 && percent > threshold) {
+-				if (spell) {
+-					SetTarget(member);
+-					group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
+-					return spell;
+-				}
++				SetTarget(member);
++				group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
++				return spell;
+ 			}
+ 		}
+ 		group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
+diff --git a/source/WorldServer/Bots/Bot.h b/source/WorldServer/Bots/Bot.h
+index a6008bf..5bb35f7 100644
+--- a/source/WorldServer/Bots/Bot.h
++++ b/source/WorldServer/Bots/Bot.h
+@@ -44,6 +44,11 @@ public:
+ 
+ 	void SetMainTank(Entity* tank) { main_tank = tank; }
+ 
++	// /bot prepull: while true, GetHoTWardSpell ignores the HP-loss gate
++	// and lays wards on un-warded group members. Cleared automatically
++	// once everyone in the group has the bot's ward up.
++	void ActivatePrepull() { m_forceWards = true; }
++
+ 	void Camp(bool immediate=false);
+ 	void ChangeLevel(int16 old_level, int16 new_level);
+ 
+@@ -91,5 +96,6 @@ private:
+ 	map<int32, int32> recast_times;
+ 	std::atomic<bool> camping;
+ 	std::atomic<bool> immediate_camp;
++	bool m_forceWards = false;
+ 	
+ };
+diff --git a/source/WorldServer/Bots/BotCommands.cpp b/source/WorldServer/Bots/BotCommands.cpp
+index f82848a..7496b9f 100644
+--- a/source/WorldServer/Bots/BotCommands.cpp
++++ b/source/WorldServer/Bots/BotCommands.cpp
+@@ -18,12 +18,48 @@ void Commands::Command_Bot(Client* client, Seperator* sep) {
+ 
+ 	if (sep && sep->IsSet(0)) {
+ 		if (strncasecmp("camp", sep->arg[0], 4) == 0) {
+-			if (!client->GetPlayer()->GetTarget() || !client->GetPlayer()->GetTarget()->IsBot()) {
+-				client->SimpleMessage(CHANNEL_COLOR_YELLOW, "You must target a bot");
++			// Three forms:
++			//   /bot camp           — target-based (legacy)
++			//   /bot camp <id>      — by spawn id
++			//   /bot camp all       — every group bot owned by caller
++			if (sep->IsSet(1) && strncasecmp("all", sep->arg[1], 3) == 0) {
++				GroupMemberInfo* gmi = client->GetPlayer()->GetGroupMemberInfo();
++				if (!gmi) {
++					client->SimpleMessage(CHANNEL_COLOR_YELLOW, "You are not in a group.");
++					return;
++				}
++				PlayerGroup* group = world.GetGroupManager()->GetGroup(gmi->group_id);
++				if (!group) return;
++				group->MGroupMembers.readlock(__FUNCTION__, __LINE__);
++				deque<GroupMemberInfo*>* members = group->GetMembers();
++				vector<Bot*> to_camp;
++				for (size_t i = 0; i < members->size(); i++) {
++					Entity* m = members->at(i)->member;
++					if (m && m->IsBot() && ((Bot*)m)->GetOwner() == client->GetPlayer())
++						to_camp.push_back((Bot*)m);
++				}
++				group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
++				for (Bot* b : to_camp) b->Camp();
++				client->Message(CHANNEL_COLOR_YELLOW, "Camped %zu bot(s).", to_camp.size());
++				return;
++			}
++
++			Bot* bot = nullptr;
++			if (sep->IsSet(1)) {
++				int32 spawn_id = atoul(sep->arg[1]);
++				Spawn* sp = client->GetPlayer()->GetZone()->GetSpawnByID(spawn_id);
++				if (sp && sp->IsBot()) bot = (Bot*)sp;
++			}
++			if (!bot) {
++				// Fall back to target.
++				if (client->GetPlayer()->GetTarget() && client->GetPlayer()->GetTarget()->IsBot())
++					bot = (Bot*)client->GetPlayer()->GetTarget();
++			}
++			if (!bot) {
++				client->SimpleMessage(CHANNEL_COLOR_YELLOW, "Target a bot, or pass an id: /bot camp <id> | /bot camp all");
+ 				return;
+ 			}
+ 
+-			Bot* bot = (Bot*)client->GetPlayer()->GetTarget();
+ 			if (bot->GetOwner() != client->GetPlayer()) {
+ 				client->SimpleMessage(CHANNEL_COLOR_YELLOW, "You can only camp your own bots.");
+ 				return;
+@@ -32,6 +68,32 @@ void Commands::Command_Bot(Client* client, Seperator* sep) {
+ 			bot->Camp();
+ 			return;
+ 		}
++		else if (strncasecmp("prepull", sep->arg[0], 7) == 0) {
++			// Activate prepull mode on every bot in the caster's group that
++			// they own. Bots will lay wards proactively on the next tick and
++			// continue cycling buffs through the normal idle path.
++			GroupMemberInfo* gmi = client->GetPlayer()->GetGroupMemberInfo();
++			if (!gmi) {
++				// Solo: prepull whatever bots the caller owns in this zone.
++				client->SimpleMessage(CHANNEL_COLOR_YELLOW, "Group up first — prepull primes the group.");
++				return;
++			}
++			PlayerGroup* group = world.GetGroupManager()->GetGroup(gmi->group_id);
++			if (!group) return;
++			group->MGroupMembers.readlock(__FUNCTION__, __LINE__);
++			deque<GroupMemberInfo*>* members = group->GetMembers();
++			int count = 0;
++			for (size_t i = 0; i < members->size(); i++) {
++				Entity* m = members->at(i)->member;
++				if (m && m->IsBot() && ((Bot*)m)->GetOwner() == client->GetPlayer()) {
++					((Bot*)m)->ActivatePrepull();
++					count++;
++				}
++			}
++			group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
++			client->Message(CHANNEL_COLOR_YELLOW, "Prepull primed on %d bot(s).", count);
++			return;
++		}
+ 		else if (strncasecmp("attack", sep->arg[0], 6) == 0) {
+ 			if (client->GetPlayer()->GetTarget() && client->GetPlayer()->GetTarget()->IsEntity() && client->GetPlayer()->GetTarget()->Alive()) {
+ 				Entity* target = (Entity*)client->GetPlayer()->GetTarget();
