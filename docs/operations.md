@@ -133,6 +133,40 @@ host port 8080 is held by `activepieces-app`. The committed
 your live `docker/.env` has `DBWEB_SERVER_PORT=8081`. The editor URL
 is then `http://127.0.0.1:8081/eq2db`.
 
+## Auto-start on host reboot (optional)
+
+A systemd unit at `infra/systemd/eq2emu.service` wraps `server-up.sh`
+and `server-down.sh` so the stack comes up on boot and shuts down
+cleanly on poweroff. Install once:
+
+```bash
+sudo cp infra/systemd/eq2emu.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now eq2emu.service
+```
+
+The unit runs as user `jbaker` (must be in the `docker` group) with
+`WorkingDirectory=/home/jbaker/repos/eq2emu`. It's `Type=oneshot`
+with `RemainAfterExit=yes` — once `server-up.sh` exits 0, systemd
+treats the service as active and `ExecStop` triggers `server-down.sh`
+on shutdown.
+
+Useful commands:
+
+```bash
+sudo systemctl status eq2emu          # current state + last log lines
+sudo journalctl -u eq2emu -f          # tail the start/stop output
+sudo systemctl restart eq2emu         # full down + up cycle
+sudo systemctl disable eq2emu         # stop auto-starting on boot
+```
+
+If you change the unit file in the repo, re-copy it and reload:
+
+```bash
+sudo cp infra/systemd/eq2emu.service /etc/systemd/system/
+sudo systemctl daemon-reload
+```
+
 ## What's *not* automated yet
 
 - **DB backup before destructive ops** — operator's responsibility for
