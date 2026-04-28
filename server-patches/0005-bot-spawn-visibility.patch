@@ -1,0 +1,17 @@
+diff --git a/source/WorldServer/Bots/BotCommands.cpp b/source/WorldServer/Bots/BotCommands.cpp
+--- a/source/WorldServer/Bots/BotCommands.cpp
++++ b/source/WorldServer/Bots/BotCommands.cpp
+@@ -560,7 +565,12 @@ void Commands::Command_Bot_Spawn(Client* client, Seperator* sep) {
+ 			client->GetCurrentZone()->AddSpawn(bot);
+ 			
+ 			if (sep->IsSet(1) && sep->IsNumber(1) && atoi(sep->arg[1]) == 1) {
+-				client->GetCurrentZone()->SendSpawn(bot, client);
++				// PrepareSpawnID flips the per-client SpawnState to SPAWN_STATE_SENDING.
++				// Without it, SendSpawn() sees !IsSendingSpawn and silently drops the
++				// packet, leaving the bot fully alive server-side (it can attack and
++				// heal) but never sent to the client (no render, no F2 target).
++				if (client->GetPlayer()->SetSpawnMap(bot))
++					client->GetCurrentZone()->SendSpawn(bot, client);
+ 				
+ 				int8 result = world.GetGroupManager()->Invite(client->GetPlayer(), bot);
+ 

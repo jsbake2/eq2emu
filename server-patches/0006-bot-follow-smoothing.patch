@@ -1,0 +1,23 @@
+diff --git a/source/WorldServer/Bots/BotBrain.cpp b/source/WorldServer/Bots/BotBrain.cpp
+--- a/source/WorldServer/Bots/BotBrain.cpp
++++ b/source/WorldServer/Bots/BotBrain.cpp
+@@ -49,9 +49,17 @@ void BotBrain::Think() {
+ 		// Get distance from the owner
+ 		float distance = GetBody()->GetDistance(target);
+
+-		// If out of melee range then move closer
+-		if (distance > rule_manager.GetZoneRule(GetBody()->GetZoneID(), R_Combat, MaxCombatRange)->GetFloat())
++		// Looser out-of-combat follow distance (3x melee range) prevents
++		// yo-yo back-and-forth behavior — bot only chases when more than
++		// the comfort zone away, and SetFollowTarget gives the engine a
++		// matching stop threshold so MoveToLocation doesn't bounce.
++		float melee_range = rule_manager.GetZoneRule(GetBody()->GetZoneID(), R_Combat, MaxCombatRange)->GetFloat();
++		float follow_zone = melee_range * 3.0f;
++
++		if (distance > follow_zone) {
++			m_body->SetFollowTarget(target, (int32)follow_zone);
+ 			MoveCloser(target);
++		}
+ 	}
+ }
+
