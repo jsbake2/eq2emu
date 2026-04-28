@@ -55,6 +55,14 @@ button.copy.copied { color: var(--copied); border-color: var(--copied); }
          border-left: 3px solid var(--accent); font-size: .85rem; }
 code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .85em; }
+header.tabs { display: flex; gap: .25rem; padding: .8rem 1.5rem 0; background: #16181c;
+              border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20;
+              grid-column: 1 / -1; }
+header.tabs a { padding: .55rem .9rem; border-radius: 6px 6px 0 0; color: var(--muted);
+                text-decoration: none; font-size: .9rem; border: 1px solid transparent;
+                border-bottom: none; }
+header.tabs a:hover { color: var(--fg); background: var(--card); }
+header.tabs a.active { color: var(--accent); background: var(--bg); border-color: var(--border); }
 @media (max-width: 800px) {
   .layout { grid-template-columns: 1fr; }
   nav { position: static; height: auto; }
@@ -62,6 +70,11 @@ code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
 </style>
 </head>
 <body>
+<header class="tabs">
+  <a href="mastercrafted-handouts.html" class="active">Crafted catalog</a>
+  <a href="gm-cheatsheet.html">GM cheatsheet</a>
+  <a href="zone-teleport.html">Zone teleport</a>
+</header>
 <div class="layout">
 <nav>
 <h1>Crafted item catalog</h1>
