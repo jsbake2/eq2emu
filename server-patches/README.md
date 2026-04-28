@@ -71,3 +71,13 @@ docker exec docker-eq2emu-server-1 \
   access to RoK / TSO / SF / DoV / CoE content that's already populated in
   the DB. Rendering may be rough for some encounters but the operator chose
   to find out empirically rather than stay locked to EoF.
+- `0005-bot-spawn-visibility.patch` — fixes the "ghost healer" bug. When a
+  bot is spawned with the auto-invite flag (`/bot spawn <id> 1`), upstream
+  calls `ZoneServer::SendSpawn(bot, client)` directly. That function checks
+  `IsSendingSpawn(spawn_id)` and silently deletes the packet if the spawn's
+  per-client state is not `SPAWN_STATE_SENDING`. Nothing in the bot-spawn
+  path sets that state, so the packet is dropped — the bot is fully active
+  server-side (heals, attacks land), but the client never receives the
+  spawn so it can't render or target the bot. Adds a `Player::SetSpawnMap`
+  call immediately before `SendSpawn` to flip the state, matching the
+  regular `CheckSendSpawnToClient` flow.

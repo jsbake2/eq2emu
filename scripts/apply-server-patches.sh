@@ -49,6 +49,14 @@ for p in "${patches[@]}"; do
         docker exec "$CONTAINER" sh -c \
             "cd $SOURCE_DIR && git apply $PATCH_STAGE/$name"
         echo "  [ok]   $name"
+    elif docker exec "$CONTAINER" sh -c \
+        "cd $SOURCE_DIR && git apply --3way --check $PATCH_STAGE/$name" 2>/dev/null; then
+        # Falls back to --3way for hand-written patches whose line offsets
+        # don't match precisely after earlier patches have shifted file
+        # contents. Safe as long as no real merge conflict exists.
+        docker exec "$CONTAINER" sh -c \
+            "cd $SOURCE_DIR && git apply --3way $PATCH_STAGE/$name"
+        echo "  [ok-3way] $name (line offsets resolved via 3-way)"
     else
         echo "  [fail] $name (conflict — resolve manually)" >&2
         exit 1
