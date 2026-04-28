@@ -30,6 +30,7 @@ Sections:
 """
 
 import html
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -184,6 +185,42 @@ def fetch_consumables(cur):
     return list(seen.values())
 
 
+def fetch_collections(cur):
+    """Return collections grouped by category, with each collection's items.
+
+    Output structure:
+      [
+        (category_name,
+         [ { 'id': <collection_id>, 'name': str, 'level': int,
+             'items': [ (item_id, item_name), ... ] }, ... ]),
+        ...
+      ]
+    """
+    cur.execute(
+        """
+        SELECT c.id, c.collection_name, c.collection_category, c.level,
+               cd.item_id, COALESCE(i.name, CONCAT('item ', cd.item_id)) AS item_name
+          FROM collections c
+          JOIN collection_details cd ON cd.collection_id = c.id
+          LEFT JOIN items i ON i.id = cd.item_id
+         ORDER BY c.collection_category, c.level, c.collection_name, cd.item_index
+        """
+    )
+    by_cat = defaultdict(list)
+    seen_collection = {}
+    for row in cur.fetchall():
+        cid = row["id"]
+        cat = row["collection_category"] or "(uncategorized)"
+        if cid not in seen_collection:
+            entry = {"id": cid, "name": row["collection_name"],
+                     "level": row["level"], "items": []}
+            seen_collection[cid] = entry
+            by_cat[cat].append(entry)
+        seen_collection[cid]["items"].append((row["item_id"], row["item_name"]))
+    return [(cat, by_cat[cat]) for cat in sorted(by_cat.keys(),
+            key=lambda c: (min(e["level"] for e in by_cat[c]), c.lower()))]
+
+
 def fetch_containers(cur):
     """Crafted bags + strong-box-style house containers. Most are level 0
     (no level requirement), so the level cap doesn't filter much. No
@@ -293,6 +330,16 @@ section.cheatsheet h2 { margin: 0 0 .25rem; font-size: 1.05rem; color: var(--acc
 section.cheatsheet h3 { margin: 1rem 0 .35rem; font-size: .9rem; color: var(--fg);
                         text-transform: uppercase; letter-spacing: .04em; }
 section.cheatsheet .cheat-meta { color: var(--muted); font-size: .85rem; margin: 0 0 .5rem; }
+section.collections-root { margin-top: 2rem; }
+section.collections-root > h2 { margin: 0 0 .25rem; font-size: 1.3rem; color: var(--accent); }
+section.coll-cat { margin-top: 1.5rem; }
+section.coll-cat > h3 { margin: 0 0 .5rem; font-size: 1rem; color: var(--accent);
+                        border-bottom: 1px solid var(--border); padding-bottom: .25rem; }
+section.coll-cat > h3 .lvl { color: var(--muted); font-size: .8rem; font-weight: 400; }
+section.coll { margin: .5rem 0 .8rem; padding: .55rem .75rem; background: var(--card);
+               border-radius: 4px; border-left: 2px solid var(--border); }
+section.coll > h4 { margin: 0 0 .35rem; font-size: .9rem; color: var(--fg); font-weight: 600; }
+section.coll > h4 .lvl { color: var(--muted); font-size: .8rem; font-weight: 400; }
 .cheat-block { background: #16181c; padding: .55rem .8rem; border-radius: 4px;
                font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
                font-size: .82rem; color: var(--fg); margin: 0; cursor: pointer;
@@ -453,11 +500,28 @@ search.addEventListener('input', () => {
     bandSec.style.display = visible ? '' : 'none';
   });
 });
+
+// Collections section has its own search, scoped to that area only.
+const collSearch = document.getElementById('coll-search');
+if (collSearch) {
+  collSearch.addEventListener('input', () => {
+    const tokens = collSearch.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    document.querySelectorAll('section.coll').forEach(coll => {
+      const hay = coll.dataset.search;
+      const show = !tokens.length || tokens.every(t => hay.includes(t));
+      coll.style.display = show ? '' : 'none';
+    });
+    document.querySelectorAll('section.coll-cat').forEach(cat => {
+      const visible = cat.querySelectorAll('section.coll:not([style*="none"])').length;
+      cat.style.display = visible ? '' : 'none';
+    });
+  });
+}
 </script>
 """
 
 
-def render(gear_rows, consumable_rows, container_rows):
+def render(gear_rows, consumable_rows, container_rows, collections):
     gear_buckets = bucket(gear_rows)
     cons_buckets = bucket(consumable_rows)
     container_buckets = bucket(container_rows)
@@ -485,6 +549,13 @@ def render(gear_rows, consumable_rows, container_rows):
             if b in container_buckets:
                 total = sum(len(v) for v in container_buckets[b].values())
                 nav.append(f'<li><a href="#cont-band-{b}">{html.escape(label)} ({total})</a></li>')
+        nav.append('</ul>')
+    if collections:
+        nav.append('<span class="section-label">Collections</span>')
+        nav.append('<ul>')
+        for cat, entries in collections:
+            anchor = "coll-cat-" + re.sub(r'[^a-z0-9]+', '-', cat.lower()).strip('-')
+            nav.append(f'<li><a href="#{anchor}">{html.escape(cat)} ({len(entries)})</a></li>')
         nav.append('</ul>')
     nav.append('</nav>')
 
@@ -544,6 +615,44 @@ def render(gear_rows, consumable_rows, container_rows):
     main.extend(render_section("gear", "Gear", gear_buckets, GEAR_TYPES, GEAR_TYPE_DISPLAY))
     main.extend(render_section("cons", "Consumables", cons_buckets, ("Food", "Bauble", "Thrown"), CONS_DISPLAY))
     main.extend(render_section("cont", "Containers", container_buckets, CONTAINER_TYPES, CONTAINER_DISPLAY))
+
+    if collections:
+        main.append('<section class="collections-root">')
+        main.append('<h2>Collections</h2>')
+        main.append('<p class="cheat-meta">All in-game collections grouped by category. '
+                    'Each collection lists the items needed to complete it; click <em>copy</em> '
+                    'to summon/give an item using the same target as the rest of the page. '
+                    'This section has its own filter — the main search box does not apply here.</p>')
+        main.append('<input id="coll-search" class="search" type="search" '
+                    'placeholder="Filter collections by name, category, or item&hellip;">')
+        for cat, entries in collections:
+            anchor = "coll-cat-" + re.sub(r'[^a-z0-9]+', '-', cat.lower()).strip('-')
+            main.append(f'<section class="coll-cat" id="{anchor}">')
+            main.append(f'<h3>{html.escape(cat)} <span class="lvl">({len(entries)} collections)</span></h3>')
+            for entry in entries:
+                # Build the search blob: collection name + category + level + every item name + every item id
+                blob_parts = [entry["name"].lower(), cat.lower(), f"lvl {entry['level']}"]
+                for iid, iname in entry["items"]:
+                    blob_parts.append(iname.lower())
+                    blob_parts.append(str(iid))
+                blob = " ".join(blob_parts)
+                main.append(f'<section class="coll" data-search="{html.escape(blob, quote=True)}">')
+                main.append(f'<h4>{html.escape(entry["name"])} '
+                            f'<span class="lvl">&middot; lvl {entry["level"]}</span></h4>')
+                main.append('<div class="items">')
+                for iid, iname in entry["items"]:
+                    search_blob = f'{iname.lower()} {iid}'
+                    main.append(
+                        f'<div class="item" data-search="{html.escape(search_blob, quote=True)}">'
+                        f'<button class="copy" data-itemid="{iid}" type="button">copy</button>'
+                        f'<span class="name">{html.escape(iname)}</span>'
+                        f'<span class="id">{iid}</span>'
+                        f'</div>'
+                    )
+                main.append('</div></section>')
+            main.append('</section>')
+        main.append('</section>')
+
     main.append('</main>')
 
     body = ['<body>', '<div class="layout">'] + nav + main + ['</div>']
@@ -563,13 +672,16 @@ def main():
         gear_rows = fetch_gear(cur)
         cons_rows = fetch_consumables(cur)
         container_rows = fetch_containers(cur)
+        collections = fetch_collections(cur)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(render(gear_rows, cons_rows, container_rows))
+    OUT.write_text(render(gear_rows, cons_rows, container_rows, collections))
     if LEGACY_MD.exists():
         LEGACY_MD.unlink()
+    total_coll_items = sum(len(c["items"]) for _, lst in collections for c in lst)
     print(f"wrote {OUT} ({len(gear_rows)} gear, {len(cons_rows)} consumable, "
-          f"{len(container_rows)} container, capped at lvl {MAX_LEVEL})")
+          f"{len(container_rows)} container, {sum(len(lst) for _, lst in collections)} "
+          f"collections / {total_coll_items} collection items, capped at lvl {MAX_LEVEL})")
 
 
 if __name__ == "__main__":
