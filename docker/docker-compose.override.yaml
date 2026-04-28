@@ -21,3 +21,22 @@ services:
   mysql:
     ports: !override
       - "127.0.0.1:3306:3306"
+
+  # Expose the EQ2 client UDP game ports (login + world) on the libvirt
+  # default bridge (virbr0 = 192.168.122.1) in addition to 127.0.0.1, so
+  # local KVM guests can reach the server. Web admin (2424) and Dawn web
+  # endpoints (9101, 9002) stay localhost-bound — they should never be
+  # reachable from a guest VM, let alone the LAN.
+  #
+  # `!override` replaces the upstream eq2emu-server ports list entirely.
+  # If you tweak listen addresses, mirror the change in
+  # `docs/gm-client-vm.md` so the guest's `cl_ls_address` still matches.
+  eq2emu-server:
+    ports: !override
+      - "127.0.0.1:${WORLD_CLIENT_PORT}:${WORLD_CLIENT_PORT}/udp"
+      - "127.0.0.1:${LOGIN_CLIENT_PORT}:${LOGIN_CLIENT_PORT}/udp"
+      - "127.0.0.1:${WEB_SERVER_PORT}:${WEB_SERVER_PORT}/tcp"
+      - "127.0.0.1:${LOGIN_WEBPORT}:${LOGIN_WEBPORT}/tcp"
+      - "127.0.0.1:${WORLD_WEBPORT}:${WORLD_WEBPORT}/tcp"
+      - "192.168.122.1:${WORLD_CLIENT_PORT}:${WORLD_CLIENT_PORT}/udp"
+      - "192.168.122.1:${LOGIN_CLIENT_PORT}:${LOGIN_CLIENT_PORT}/udp"
