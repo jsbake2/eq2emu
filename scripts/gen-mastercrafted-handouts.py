@@ -1,32 +1,36 @@
 #!/usr/bin/env python3
 """
 Generate docs/mastercrafted-handouts.html — a searchable, click-to-copy
-catalog of mastercrafted items. Now supports a "give to <player>" target
-in the page header so the operator's GM client (running in a separate VM)
-can hand items to other players via /giveitem instead of /summonitem.
+catalog. Now covers BOTH crafted (mastercrafted) and dropped gear, color-
+coded by rarity (white / blue / orange / red — normal / treasured /
+legendary / fabled). Supports a "give to <player>" target so the operator's
+GM client can hand items via /giveitem instead of /summonitem.
 
 Read-only against the live eq2emu DB. Credentials from docker/.env.
 
-Mastercrafted gear filter (the DB has no clean MC/HC flag, so we use a
-hand-curated material allowlist):
-
-  * Items where the material token (first word of name, or second word
-    after 'Imbued') is in KEEP_MATERIALS_BY_BAND for the item's level
-    band. The allowlist is the rare-harvest table from the EQ2 wiki,
-    cross-checked against EQ2Emu data — see KEEP_MATERIALS_BY_BAND below.
-  * crafted = 1, id < 10_000_000 (skip client-version duplicate IDs).
-  * Sub-quality prefixes (crude/shaped/forged/fashioned/tailored/blessed/
-    conditioned/pristine) dropped — only the final-quality output kept.
-  * Capped at MAX_LEVEL (matches R_Player/MaxLevel on the live server).
-  * Dedup by LOWER(name), keeping the lowest id.
-
-Consumables: all crafted Food / Bauble / Thrown items, capped at
-MAX_LEVEL. No material filter — there isn't a clean mastercrafted signal
-for consumables in this DB, and excess food/totems is harmless.
-
 Sections:
-  * Gear: item_type in Weapon / Armor / Shield / Ranged / Bauble / Normal.
-  * Consumables: item_type in Food / Bauble / Thrown.
+  * Crafted gear (item_type in Weapon/Armor/Shield/Ranged/Bauble/Normal),
+    only player-craftable mastercrafted (rare-harvest material allowlist).
+  * Crafted consumables (Food / Bauble / Thrown).
+  * Crafted containers (Bag / House Container).
+  * Dropped gear — same item_type set, but crafted=0. Capped at MAX_LEVEL
+    and deduped same as crafted. No material allowlist (there's no
+    materials concept for drops).
+  * Collections (in-game collection chains).
+
+Rarity coloring:
+  Each item picks a rarity class from items.tier:
+    tier 1-4   → 'rarity-normal'    (white, base/handcrafted)
+    tier 5-7   → 'rarity-treasured' (blue, treasured / mastercrafted)
+    tier 8-9   → 'rarity-legendary' (orange)
+    tier 10-12 → 'rarity-fabled'    (red)
+
+Other filters retained from the original mastercrafted catalog:
+  * crafted gear: KEEP_MATERIALS_BY_BAND allowlist applied.
+  * id < 10_000_000 (skip client-version duplicate IDs).
+  * Sub-quality crafting prefixes (crude/shaped/forged/...) dropped.
+  * Capped at MAX_LEVEL.
+  * Dedup by LOWER(name), lowest id wins.
 """
 
 import html
@@ -144,7 +148,7 @@ def material_word(name_lower):
 
 def fetch_gear(cur):
     sql = f"""
-        SELECT id, name, item_type, required_level, recommended_level
+        SELECT id, name, item_type, required_level, recommended_level, tier
           FROM items
          WHERE crafted = 1 AND id < 10000000
            AND item_type IN ({",".join(f"'{t}'" for t in GEAR_TYPES)})
@@ -164,9 +168,46 @@ def fetch_gear(cur):
     return list(seen.values())
 
 
+def fetch_dropped_gear(cur):
+    """All non-crafted gear (item_type in GEAR_TYPES, crafted=0). No material
+    filter — drops use whatever names the content authors wrote."""
+    sql = f"""
+        SELECT id, name, item_type, required_level, recommended_level, tier
+          FROM items
+         WHERE crafted = 0 AND id < 10000000
+           AND item_type IN ({",".join(f"'{t}'" for t in GEAR_TYPES)})
+           AND name <> ''
+         ORDER BY id
+    """
+    seen = {}
+    for r in fetch(cur, sql):
+        key = r["name"].lower()
+        if key in seen:
+            continue
+        if effective_level(r["required_level"], r["recommended_level"]) > MAX_LEVEL:
+            continue
+        # Drops have a lot of placeholder / quest-flagged junk with adventure
+        # _classes=0 (unequippable). Skip those — they're not useful as handout
+        # items.
+        seen[key] = r
+    return list(seen.values())
+
+
+def rarity_class(tier):
+    """Map items.tier to a CSS rarity class for color coding."""
+    t = tier or 0
+    if t >= 10:
+        return "rarity-fabled"      # red
+    if t >= 8:
+        return "rarity-legendary"   # orange
+    if t >= 5:
+        return "rarity-treasured"   # blue
+    return "rarity-normal"          # white
+
+
 def fetch_consumables(cur):
     sql = """
-        SELECT id, name, item_type, required_level, recommended_level
+        SELECT id, name, item_type, required_level, recommended_level, tier
           FROM items
          WHERE crafted = 1 AND id < 10000000
            AND item_type IN ('Food', 'Bauble', 'Thrown')
@@ -226,7 +267,7 @@ def fetch_containers(cur):
     the catalog should just show what's available."""
     types_in = ",".join(f"'{t}'" for t in CONTAINER_TYPES)
     sql = f"""
-        SELECT id, name, item_type, required_level, recommended_level
+        SELECT id, name, item_type, required_level, recommended_level, tier
           FROM items
          WHERE crafted = 1 AND id < 10000000
            AND item_type IN ({types_in})
@@ -322,12 +363,23 @@ section.type > h3 { margin: 0 0 .4rem; font-size: .95rem; color: var(--fg);
                     border-bottom: 1px solid var(--border); padding-bottom: .25rem; }
 .items { display: grid; gap: .25rem; }
 .item { display: grid; grid-template-columns: auto 1fr auto; gap: .6rem; align-items: center;
-        padding: .35rem .6rem; background: var(--card); border-radius: 4px; font-size: .88rem; }
+        padding: .35rem .6rem; background: var(--card); border-radius: 4px; font-size: .88rem;
+        border-left: 3px solid transparent; }
 .item:hover { background: var(--hover); }
 .item .name { color: var(--fg); }
 .item .lvl { color: var(--muted); font-size: .8rem; }
 .item .id  { color: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
              font-size: .8rem; }
+/* Rarity color coding (left border + name color):
+   normal=white, treasured=blue, legendary=orange, fabled=red. */
+.item.rarity-normal     { border-left-color: #ffffff; }
+.item.rarity-normal     .name { color: #ffffff; }
+.item.rarity-treasured  { border-left-color: #4a8fe0; }
+.item.rarity-treasured  .name { color: #6ea8fe; }
+.item.rarity-legendary  { border-left-color: #ff8c2a; }
+.item.rarity-legendary  .name { color: #ffa64d; }
+.item.rarity-fabled     { border-left-color: #d43838; }
+.item.rarity-fabled     .name { color: #ff5b5b; font-weight: 600; }
 button.copy { background: transparent; color: var(--accent); border: 1px solid var(--border);
               border-radius: 4px; padding: .2rem .55rem; font-size: .75rem; cursor: pointer;
               font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
@@ -539,10 +591,11 @@ if (collSearch) {
 """
 
 
-def render(gear_rows, consumable_rows, container_rows, collections):
+def render(gear_rows, consumable_rows, container_rows, dropped_rows, collections):
     gear_buckets = bucket(gear_rows)
     cons_buckets = bucket(consumable_rows)
     container_buckets = bucket(container_rows)
+    dropped_buckets = bucket(dropped_rows)
 
     # nav — each group is a collapsible <details> block, closed by default.
     nav = ['<nav>', '<h1>Crafted item catalog</h1>',
@@ -559,11 +612,20 @@ def render(gear_rows, consumable_rows, container_rows, collections):
 
     if gear_buckets:
         gear_total = sum(sum(len(v) for v in band.values()) for band in gear_buckets.values())
-        open_group("Gear", gear_total)
+        open_group("Crafted gear", gear_total)
         for b, label in BAND_LABELS:
             if b in gear_buckets:
                 total = sum(len(v) for v in gear_buckets[b].values())
                 nav.append(f'<li><a href="#gear-band-{b}">{html.escape(label)} ({total})</a></li>')
+        close_group()
+
+    if dropped_buckets:
+        dropped_total = sum(sum(len(v) for v in band.values()) for band in dropped_buckets.values())
+        open_group("Dropped gear", dropped_total)
+        for b, label in BAND_LABELS:
+            if b in dropped_buckets:
+                total = sum(len(v) for v in dropped_buckets[b].values())
+                nav.append(f'<li><a href="#dropped-band-{b}">{html.escape(label)} ({total})</a></li>')
         close_group()
 
     if cons_buckets:
@@ -634,9 +696,10 @@ def render(gear_rows, consumable_rows, container_rows, collections):
                 for r in rows:
                     lvl = effective_level(r["required_level"], r["recommended_level"])
                     name = r["name"].strip()
+                    rarity = rarity_class(r.get("tier"))
                     search_blob = f'{name.lower()} {r["id"]} {typ.lower()}'
                     out.append(
-                        f'<div class="item" data-search="{html.escape(search_blob, quote=True)}">'
+                        f'<div class="item {rarity}" data-search="{html.escape(search_blob, quote=True)}">'
                         f'<button class="copy" data-itemid="{r["id"]}" type="button">copy</button>'
                         f'<span class="name">{html.escape(name)} '
                         f'<span class="lvl">&middot; lvl {lvl}</span></span>'
@@ -647,7 +710,8 @@ def render(gear_rows, consumable_rows, container_rows, collections):
             out.append('</section>')
         return out
 
-    main.extend(render_section("gear", "Gear", gear_buckets, GEAR_TYPES, GEAR_TYPE_DISPLAY))
+    main.extend(render_section("gear", "Crafted gear", gear_buckets, GEAR_TYPES, GEAR_TYPE_DISPLAY))
+    main.extend(render_section("dropped", "Dropped gear", dropped_buckets, GEAR_TYPES, GEAR_TYPE_DISPLAY))
     main.extend(render_section("cons", "Consumables", cons_buckets, ("Food", "Bauble", "Thrown"), CONS_DISPLAY))
     main.extend(render_section("cont", "Containers", container_buckets, CONTAINER_TYPES, CONTAINER_DISPLAY))
 
@@ -714,16 +778,18 @@ def main():
         gear_rows = fetch_gear(cur)
         cons_rows = fetch_consumables(cur)
         container_rows = fetch_containers(cur)
+        dropped_rows = fetch_dropped_gear(cur)
         collections = fetch_collections(cur)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(render(gear_rows, cons_rows, container_rows, collections))
+    OUT.write_text(render(gear_rows, cons_rows, container_rows, dropped_rows, collections))
     if LEGACY_MD.exists():
         LEGACY_MD.unlink()
     total_coll_items = sum(len(c["items"]) for _, lst in collections for c in lst)
-    print(f"wrote {OUT} ({len(gear_rows)} gear, {len(cons_rows)} consumable, "
-          f"{len(container_rows)} container, {sum(len(lst) for _, lst in collections)} "
-          f"collections / {total_coll_items} collection items, capped at lvl {MAX_LEVEL})")
+    print(f"wrote {OUT} ({len(gear_rows)} gear, {len(dropped_rows)} dropped, "
+          f"{len(cons_rows)} consumable, {len(container_rows)} container, "
+          f"{sum(len(lst) for _, lst in collections)} collections / "
+          f"{total_coll_items} collection items, capped at lvl {MAX_LEVEL})")
 
 
 if __name__ == "__main__":
