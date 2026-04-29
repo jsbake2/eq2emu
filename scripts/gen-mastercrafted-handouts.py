@@ -66,10 +66,12 @@ BAND_LABELS = [
     (9, "Levels 90+"),
 ]
 # First-word prefixes that mark sub-quality (failed) crafted variants — drop
-# these regardless of material. The Pristine / unprefixed variant is the
-# final-quality output we want.
+# these regardless of material. ONLY the actual fail-prefixes; "pristine" was
+# wrongly listed (it's the BEST quality, not a failure prefix), and "blessed"
+# is a legit class-themed prefix on real items (Blessed Bronze X). Removing
+# them was dropping ~half the armor 1-30 catalog.
 SUBQUALITY_PREFIXES = {"crude", "shaped", "forged", "fashioned", "tailored",
-                       "blessed", "conditioned", "pristine"}
+                       "conditioned"}
 
 # Mastercrafted rare-material allowlist per level band (band N covers levels
 # N*10 to N*10+9). Sourced from the EQ2 wiki "Rare Harvests by Tier" data
@@ -157,10 +159,6 @@ def fetch_gear(cur):
             continue
         parts = key.split()
         if not parts or parts[0] in SUBQUALITY_PREFIXES:
-            continue
-        band = band_for(r["required_level"], r["recommended_level"])
-        material = material_word(key)
-        if material not in KEEP_MATERIALS_BY_BAND.get(band, set()):
             continue
         seen[key] = r
     return list(seen.values())
@@ -362,6 +360,14 @@ section.coll > h4 .lvl { color: var(--muted); font-size: .8rem; font-weight: 400
          border-left: 3px solid var(--accent); font-size: .85rem; }
 code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .85em; }
+header.tabs { display: flex; gap: .25rem; padding: .8rem 1.5rem 0; background: #16181c;
+              border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20;
+              grid-column: 1 / -1; }
+header.tabs a { padding: .55rem .9rem; border-radius: 6px 6px 0 0; color: var(--muted);
+                text-decoration: none; font-size: .9rem; border: 1px solid transparent;
+                border-bottom: none; }
+header.tabs a:hover { color: var(--fg); background: var(--card); }
+header.tabs a.active { color: var(--accent); background: var(--bg); border-color: var(--border); }
 @media (max-width: 800px) {
   .layout { grid-template-columns: 1fr; }
   nav { position: static; height: auto; }
@@ -684,7 +690,14 @@ def render(gear_rows, consumable_rows, container_rows, collections):
 
     main.append('</main>')
 
-    body = ['<body>', '<div class="layout">'] + nav + main + ['</div>']
+    tabs = [
+        '<header class="tabs">',
+        '  <a href="mastercrafted-handouts.html" class="active">Crafted catalog</a>',
+        '  <a href="gm-cheatsheet.html">GM cheatsheet</a>',
+        '  <a href="zone-teleport.html">Zone teleport</a>',
+        '</header>',
+    ]
+    body = ['<body>'] + tabs + ['<div class="layout">'] + nav + main + ['</div>']
     body.append(PAGE_SCRIPT)
     body.append('</body></html>')
     return PAGE_HEAD + "\n".join(body)
