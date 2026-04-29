@@ -1,7 +1,7 @@
 diff --git a/source/WorldServer/Bots/Bot.h b/source/WorldServer/Bots/Bot.h
 --- a/source/WorldServer/Bots/Bot.h
 +++ b/source/WorldServer/Bots/Bot.h
-@@ -44,6 +44,25 @@
+@@ -44,6 +44,26 @@
  
  	void SetMainTank(Entity* tank) { main_tank = tank; }
  
@@ -18,6 +18,7 @@ diff --git a/source/WorldServer/Bots/Bot.h b/source/WorldServer/Bots/Bot.h
 +	// damage spells (DD/DoT) until the tank holds aggro. Debuffs are
 +	// allowed since they generate less hate and matter for the opener.
 +	bool ShouldHoldDamage();
++	Entity* AutoDetectMainTank();
 +
 +	// /bot prepull: while true, GetHoTWardSpell ignores the HP-loss gate
 +	// and lays wards on un-warded group members. Cleared automatically
@@ -27,7 +28,7 @@ diff --git a/source/WorldServer/Bots/Bot.h b/source/WorldServer/Bots/Bot.h
  	void Camp(bool immediate=false);
  	void ChangeLevel(int16 old_level, int16 new_level);
  
-@@ -73,6 +92,7 @@
+@@ -73,6 +93,7 @@
  	int32 combat_target;
  
  	Entity* main_tank;
@@ -35,7 +36,7 @@ diff --git a/source/WorldServer/Bots/Bot.h b/source/WorldServer/Bots/Bot.h
  
  	map<int32, int8> bot_spells;
  	map<int32, int8> dd_spells;
-@@ -91,5 +111,6 @@
+@@ -91,5 +112,6 @@
  	map<int32, int32> recast_times;
  	std::atomic<bool> camping;
  	std::atomic<bool> immediate_camp;
@@ -159,7 +160,7 @@ diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
  	}
  
  	safe_delete(spells1);
-@@ -256,19 +333,33 @@
+@@ -256,19 +333,63 @@
  	if (spell)
  		return spell;
  
@@ -186,22 +187,52 @@ diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
  	return 0;
  }
  
++Entity* Bot::AutoDetectMainTank() {
++	// Pick the highest-level fighter-class member of the owner's group.
++	// Lets /bot aoe + aggro guard work without /bot maintank for groups
++	// with one obvious tank.
++	Entity* owner = GetOwner();
++	if (!owner) return nullptr;
++	GroupMemberInfo* gmi = owner->GetGroupMemberInfo();
++	if (!gmi) return nullptr;
++	PlayerGroup* group = world.GetGroupManager()->GetGroup(gmi->group_id);
++	if (!group) return nullptr;
++	Entity* best = nullptr;
++	group->MGroupMembers.readlock(__FUNCTION__, __LINE__);
++	deque<GroupMemberInfo*>* members = group->GetMembers();
++	for (size_t i = 0; i < members->size(); i++) {
++		Entity* m = members->at(i)->member;
++		if (!m || !m->Alive())
++			continue;
++		if (classes.GetBaseClass(m->GetAdventureClass()) != FIGHTER)
++			continue;
++		if (!best || m->GetLevel() > best->GetLevel())
++			best = m;
++	}
++	group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
++	return best;
++}
++
 +bool Bot::ShouldHoldDamage() {
-+	if (!main_tank)
-+		return false;        // legacy behavior when no tank set
-+	if (main_tank == this)
++	// Use explicit /bot maintank assignment first; fall back to auto-detect
++	// (any fighter-class group member). Keeps the toggle automatic for
++	// single-tank groups without losing the override path.
++	Entity* tank = main_tank ? main_tank : AutoDetectMainTank();
++	if (!tank)
++		return false;        // no tank in group — fire freely
++	if (tank == this)
 +		return false;        // I am the tank — fire freely
 +	Spawn* tgt = GetTarget();
 +	if (!tgt || !tgt->IsNPC())
 +		return false;
 +	Entity* most_hated = ((NPC*)tgt)->Brain()->GetMostHated();
-+	return most_hated != main_tank;
++	return most_hated != tank;
 +}
 +
  void Bot::SetRecast(Spell* spell, int32 time) {
  	recast_times[spell->GetSpellID()] = time;
  }
-@@ -294,6 +385,8 @@
+@@ -294,6 +415,8 @@
  	for (itr = dd_spells.begin(); itr != dd_spells.end(); itr++) {
  		spell = master_spell_list.GetSpell(itr->first, itr->second);
  		if (spell && IsSpellReady(spell)) {
@@ -210,7 +241,7 @@ diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
  			return spell;
  		}
  	}
-@@ -425,31 +518,41 @@
+@@ -425,31 +548,41 @@
  	if (!spell)
  		return 0;
  
@@ -263,7 +294,7 @@ diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
  			}
  		}
  		group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
-@@ -499,6 +602,8 @@
+@@ -499,6 +632,8 @@
  	for (itr = dot_spells.begin(); itr != dot_spells.end(); itr++) {
  		spell = master_spell_list.GetSpell(itr->first, itr->second);
  		if (spell && IsSpellReady(spell)) {
@@ -272,7 +303,7 @@ diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
  			// If target already has this effect on them then continue to the next spell
  			if (((Entity*)GetTarget())->GetSpellEffect(itr->first))
  				continue;
-@@ -523,6 +628,16 @@
+@@ -523,6 +658,16 @@
  	for (itr = buff_spells.begin(); itr != buff_spells.end(); itr++) {
  		spell = master_spell_list.GetSpell(itr->first, itr->second);
  		if (spell && IsSpellReady(spell)) {
