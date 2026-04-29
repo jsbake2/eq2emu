@@ -1,14 +1,31 @@
 diff --git a/source/WorldServer/Bots/BotCommands.cpp b/source/WorldServer/Bots/BotCommands.cpp
 --- a/source/WorldServer/Bots/BotCommands.cpp
 +++ b/source/WorldServer/Bots/BotCommands.cpp
-@@ -270,6 +270,15 @@ void Commands::Command_Bot(Client* client, Seperator* sep) {
+@@ -45,10 +45,14 @@
+ 			}
+ 
+ 			Bot* bot = nullptr;
+-			if (sep->IsSet(1)) {
+-				int32 spawn_id = atoul(sep->arg[1]);
+-				Spawn* sp = client->GetPlayer()->GetZone()->GetSpawnByID(spawn_id);
+-				if (sp && sp->IsBot()) bot = (Bot*)sp;
++			if (sep->IsSet(1) && sep->IsNumber(1)) {
++				// arg is the slot from /bot list, not the runtime spawn id.
++				// Match the lookup pattern used by /bot delete / /bot follow.
++				int32 index = atoi(sep->arg[1]);
++				if (client->GetPlayer()->SpawnedBots.count(index) > 0) {
++					Spawn* sp = client->GetCurrentZone()->GetSpawnByID(client->GetPlayer()->SpawnedBots[index]);
++					if (sp && sp->IsBot()) bot = (Bot*)sp;
++				}
+ 			}
+ 			if (!bot) {
+ 				// Fall back to target.
+@@ -266,6 +270,14 @@
  								member->SetX(player->GetX());
  								member->SetY(player->GetY());
  								member->SetZ(player->GetZ());
-+								// Reset the "next destination" coords (X2/Y2/Z2) so the
-+								// client doesn't extrapolate motion back toward the old
-+								// position — pos_next_x/y/z packet field is what makes
-+								// the bot animate running off after a successful teleport.
++								// Reset pos_next_x/y/z so the client doesn't extrapolate
++								// motion back to the pre-summon position (run-off animation).
 +								member->appearance.pos.X2 = member->appearance.pos.X;
 +								member->appearance.pos.Y2 = member->appearance.pos.Y;
 +								member->appearance.pos.Z2 = member->appearance.pos.Z;
@@ -18,7 +35,7 @@ diff --git a/source/WorldServer/Bots/BotCommands.cpp b/source/WorldServer/Bots/B
  								// Wipe stale movement state so the bot doesn't run back to where
  								// it was before the teleport. Brain re-evaluates next tick.
  								member->ClearRunningLocations();
-@@ -293,6 +302,12 @@ void Commands::Command_Bot(Client* client, Seperator* sep) {
+@@ -291,6 +303,12 @@
  						bot->SetX(player->GetX());
  						bot->SetY(player->GetY());
  						bot->SetZ(player->GetZ());
