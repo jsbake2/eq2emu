@@ -1,0 +1,79 @@
+diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
+index ae44730..5e5d32d 100644
+--- a/source/WorldServer/Bots/Bot.cpp
++++ b/source/WorldServer/Bots/Bot.cpp
+@@ -166,6 +166,74 @@ void Bot::GetNewSpells() {
+ 
+ 	int8 preferred_tier = rule_manager.GetGlobalRule(R_Spells, DefaultSpellGrantTier)->GetInt8();
+ 
++	// Chain dedup: collapse chains like Accretion → Profane Accretion → Venal
++	// Accretion to keep only the highest-level entry. Names share no stem so
++	// we use the display-effect description as a chain signature, replacing
++	// digit runs with '#' so wards-for-2167 and wards-for-3854 collapse.
++	int8 advClass = GetAdventureClass();
++	int8 baseClass = classes.GetBaseClass(advClass);
++	int8 secondClass = classes.GetSecondaryBaseClass(advClass);
++	auto class_level = [&](Spell* s) -> int16 {
++		if (!s) return 0;
++		vector<LevelArray*>* lvls = s->GetSpellLevels();
++		if (!lvls) return 0;
++		int16 best = 0;
++		for (size_t i = 0; i < lvls->size(); i++) {
++			LevelArray* la = lvls->at(i);
++			if (!la) continue;
++			if (la->adventure_class == advClass || la->adventure_class == baseClass || la->adventure_class == secondClass) {
++				if (la->spell_level > best) best = la->spell_level;
++			}
++		}
++		return best;
++	};
++	auto chain_key = [](Spell* s) -> string {
++		if (!s || !s->GetSpellData()) return "";
++		vector<SpellDisplayEffect*>* effects = s->GetSpellEffects();
++		if (!effects || effects->empty()) return "";
++		string tmpl;
++		for (size_t i = 0; i < effects->size(); i++) {
++			SpellDisplayEffect* e = effects->at(i);
++			if (!e || e->description.empty()) continue;
++			string norm;
++			for (char c : e->description) {
++				if (isdigit((unsigned char)c) || c == ',' || c == '.') {
++					if (norm.empty() || norm.back() != '#')
++						norm.push_back('#');
++				} else {
++					norm.push_back(c);
++				}
++			}
++			if (!tmpl.empty()) tmpl += "|";
++			tmpl += norm;
++		}
++		if (tmpl.empty()) return "";
++		char buf[64];
++		snprintf(buf, sizeof(buf), "%d:%d:%d:",
++			(int)s->GetSpellData()->spell_type,
++			(int)s->GetSpellData()->target_type,
++			(int)s->GetSpellData()->friendly_spell);
++		return string(buf) + tmpl;
++	};
++	map<string, Spell*> chain_best;
++	vector<Spell*> uniq;
++	uniq.reserve(spells.size());
++	for (size_t i = 0; i < spells.size(); i++) {
++		Spell* s = spells[i];
++		string key = chain_key(s);
++		if (key.empty()) {
++			// No description → can't dedup, keep as-is.
++			uniq.push_back(s);
++			continue;
++		}
++		auto it = chain_best.find(key);
++		if (it == chain_best.end() || class_level(s) > class_level(it->second))
++			chain_best[key] = s;
++	}
++	for (auto& kv : chain_best)
++		uniq.push_back(kv.second);
++	spells.swap(uniq);
++
+ 	vector<Spell*>::iterator itr;
+ 	map<int32, int8>* spell_list = 0;
+ 	for (itr = spells.begin(); itr != spells.end(); itr++) {

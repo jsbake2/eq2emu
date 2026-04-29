@@ -54,8 +54,10 @@ echo "==> applying server patches"
 
 # Decide whether a rebuild is needed. Cheap mtime compare: any patched
 # source file newer than the running binary means we need to rebuild.
+# Looks at the newest mtime across all *.cpp / *.h in WorldServer/ so the
+# check fires when any patch touches any source file (not just BotBrain).
 PATCHED_MTIME=$(docker exec "$SERVER_CONTAINER" sh -c \
-    "stat -c %Y $SOURCE_DIR/WorldServer/Bots/BotBrain.cpp 2>/dev/null || echo 0")
+    "find $SOURCE_DIR/WorldServer -name '*.cpp' -o -name '*.h' 2>/dev/null | xargs -r stat -c %Y 2>/dev/null | sort -nr | head -1 || echo 0")
 BINARY_MTIME=$(docker exec "$SERVER_CONTAINER" sh -c \
     "stat -c %Y $SERVER_DIR/eq2world 2>/dev/null || echo 0")
 

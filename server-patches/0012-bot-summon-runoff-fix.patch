@@ -1,0 +1,33 @@
+diff --git a/source/WorldServer/Bots/BotCommands.cpp b/source/WorldServer/Bots/BotCommands.cpp
+--- a/source/WorldServer/Bots/BotCommands.cpp
++++ b/source/WorldServer/Bots/BotCommands.cpp
+@@ -270,6 +270,15 @@ void Commands::Command_Bot(Client* client, Seperator* sep) {
+ 								member->SetX(player->GetX());
+ 								member->SetY(player->GetY());
+ 								member->SetZ(player->GetZ());
++								// Reset the "next destination" coords (X2/Y2/Z2) so the
++								// client doesn't extrapolate motion back toward the old
++								// position — pos_next_x/y/z packet field is what makes
++								// the bot animate running off after a successful teleport.
++								member->appearance.pos.X2 = member->appearance.pos.X;
++								member->appearance.pos.Y2 = member->appearance.pos.Y;
++								member->appearance.pos.Z2 = member->appearance.pos.Z;
++								member->appearance.pos.X3 = member->appearance.pos.X;
++								member->appearance.pos.Y3 = member->appearance.pos.Y;
++								member->appearance.pos.Z3 = member->appearance.pos.Z;
+ 								// Wipe stale movement state so the bot doesn't run back to where
+ 								// it was before the teleport. Brain re-evaluates next tick.
+ 								member->ClearRunningLocations();
+@@ -293,6 +302,12 @@ void Commands::Command_Bot(Client* client, Seperator* sep) {
+ 						bot->SetX(player->GetX());
+ 						bot->SetY(player->GetY());
+ 						bot->SetZ(player->GetZ());
++						bot->appearance.pos.X2 = bot->appearance.pos.X;
++						bot->appearance.pos.Y2 = bot->appearance.pos.Y;
++						bot->appearance.pos.Z2 = bot->appearance.pos.Z;
++						bot->appearance.pos.X3 = bot->appearance.pos.X;
++						bot->appearance.pos.Y3 = bot->appearance.pos.Y;
++						bot->appearance.pos.Z3 = bot->appearance.pos.Z;
+ 						bot->ClearRunningLocations();
+ 						bot->following = false;
+ 						client->Message(CHANNEL_COLOR_YELLOW, "Summoning %s.", bot->GetName());
