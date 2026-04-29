@@ -1,0 +1,15 @@
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,3,4,0,0,0,'Unused');
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,3,4,5,0,1,'Unused');
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,3,4,6,0,2,'Unused');
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,3,4,7,0,3,'Unused');
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,3,4,8,0,4,'Unused');
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,3,4,2,0,6,'Unused');
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,3,4,1,0,5,'Unused');
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,1,0,8308,1,11,'Unused');
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,1,0,8057,1,12,'Unused');
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,1,0,8278,1,13,'Unused');
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,3,4,9,0,7,'Unused');
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,3,3,4,0,0,'Unused');
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,1,3,2560001,1,1,'Unused');
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,3,0,10,0,1,'Unused');
+INSERT INTO character_skillbar (char_id, type, hotbar, spell_id, tier, slot, text_val) VALUES (__CHAR_ID__,3,4,3,0,11,'Unused');

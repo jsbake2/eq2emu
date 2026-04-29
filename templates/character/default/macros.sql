@@ -1,0 +1,15 @@
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,1,4,'spawn 1-3','/bot spawn 1 1');
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,1,4,'spawn 1-3','/bot spawn 2 1');
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,1,4,'spawn 1-3','/bot spawn 3 1');
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,2,4,'spaw 4-5','/bot spawn 4 1');
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,2,4,'spaw 4-5','/bot spawn 5 1');
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,3,6,'summon','/bot summon group');
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,0,13,'camp 1','/bot camp 1');
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,5,13,'camp 2','/bot camp 2');
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,6,13,'camp 3','/bot camp 3');
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,7,13,'camp 4','/bot camp 4');
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,8,13,'camp 5','/bot camp 5');
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,4,12,'Summon and Attack','/bot summon group');
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,4,12,'Summon and Attack','/bot attack');
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,9,11,'Camp All','/bot camp all');
+INSERT INTO character_macros (char_id, macro_number, macro_icon, macro_name, macro_text) VALUES (__CHAR_ID__,10,10,'Bot Attack','/bot attack');
