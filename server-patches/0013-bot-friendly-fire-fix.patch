@@ -1,0 +1,37 @@
+diff --git a/source/WorldServer/Combat.cpp b/source/WorldServer/Combat.cpp
+index 7079322..c078984 100644
+--- a/source/WorldServer/Combat.cpp
++++ b/source/WorldServer/Combat.cpp
+@@ -28,6 +28,7 @@
+ #include "classes.h"
+ #include "World.h"
+ #include "LuaInterface.h"
++#include "Bots/Bot.h"
+ #include "Rules/Rules.h"
+ #include "SpellProcess.h"
+ #include "World.h"
+@@ -126,6 +127,24 @@ bool Entity::AttackAllowed(Entity* target, float distance, bool range_attack) {
+ 		LogWrite(COMBAT__DEBUG, 3, "AttackAllowed", "Failed to attack: players are not allowed to attack bots");
+ 		return false;
+ 	}
++
++	// Group safety: bots can't attack their own group members (player owner
++	// or fellow bot). Without this check, accidentally targeting a bot and
++	// /bot attack-ing or assisting routes the swing through and the bots
++	// start fighting each other.
++	if (attacker->IsBot() && (target->IsPlayer() || target->IsBot())) {
++		GroupMemberInfo* a_gmi = attacker->GetGroupMemberInfo();
++		GroupMemberInfo* t_gmi = target->GetGroupMemberInfo();
++		if (a_gmi && t_gmi && a_gmi->group_id == t_gmi->group_id) {
++			LogWrite(COMBAT__DEBUG, 3, "AttackAllowed", "Failed to attack: bot may not attack its own group");
++			return false;
++		}
++		// Always block attacks on the bot's own owner even if for some reason
++		// the group lookup fails.
++		if (((Bot*)attacker)->GetOwner() == target) {
++			return false;
++		}
++	}
+ 	
+ 	if(GetInfoStruct()->get_lockable_encounter() && rule_manager.GetZoneRule(GetZoneID(), R_Combat, LockedEncounterNoAttack)->GetBool()) {
+ 		if(IsNPC() && GetAttackable() == 0 && target->IsNPC()) {
