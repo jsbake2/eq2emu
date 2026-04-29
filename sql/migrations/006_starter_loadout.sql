@@ -4,10 +4,14 @@
 --
 -- Items chosen:
 --   20630   Brewmeister's Backpack            36-slot bag    × 6
---   45462   Call of the Veteran               recall clicky  × 1
 --   35993   delectable manticore pie          food, L50, 5hr × 5 stacks of 20
 --   36545   Nagafen's Flame                   drink, L50, 5hr × 5 stacks of 20
---   48174   Spirit Steed                      mount clicky   × 1
+--
+-- Removed: Call of the Veteran (45462) and Spirit Steed (48174). The CoV
+-- recall clicky proved redundant on this small server, and v546 client
+-- doesn't render mount appearances correctly even with valid in-version
+-- model ids — see PR comments. Add them back once the mount-rendering
+-- packet path is sorted.
 --
 -- Note on bag count: matches Robskin's current loadout (6 Brewmeister's
 -- Backpacks). Operator confirmed that's the right count.
@@ -55,7 +59,7 @@ ALTER TABLE starting_items DROP INDEX IF EXISTS NewIndex;
 -- Clean any prior partial run so this is idempotent.
 DELETE FROM starting_items
 WHERE class_id = 255 AND race_id = 255
-  AND item_id IN (20630, 45462, 35993, 36545, 48174);
+  AND item_id IN (20630, 35993, 36545);
 
 -- 6 × Brewmeister's Backpack (36-slot)
 INSERT INTO starting_items (class_id, race_id, type, item_id, count) VALUES
@@ -65,10 +69,6 @@ INSERT INTO starting_items (class_id, race_id, type, item_id, count) VALUES
   (255, 255, 'NOT-EQUIPPED', 20630, 1),
   (255, 255, 'NOT-EQUIPPED', 20630, 1),
   (255, 255, 'NOT-EQUIPPED', 20630, 1);
-
--- 1 × Call of the Veteran (recall to a friend)
-INSERT INTO starting_items (class_id, race_id, type, item_id, count) VALUES
-  (255, 255, 'NOT-EQUIPPED', 45462, 1);
 
 -- 5 stacks × 50 of food (delectable manticore pie, L50, 5hr)
 INSERT INTO starting_items (class_id, race_id, type, item_id, count) VALUES
@@ -86,10 +86,6 @@ INSERT INTO starting_items (class_id, race_id, type, item_id, count) VALUES
   (255, 255, 'NOT-EQUIPPED', 36545, 20),
   (255, 255, 'NOT-EQUIPPED', 36545, 20);
 
--- 1 × Spirit Steed (mount clicky)
-INSERT INTO starting_items (class_id, race_id, type, item_id, count) VALUES
-  (255, 255, 'NOT-EQUIPPED', 48174, 1);
-
 COMMIT;
 
 -- DOWN --------------------------------------------------------------------
@@ -104,5 +100,5 @@ COMMIT;
 -- START TRANSACTION;
 -- DELETE FROM starting_items
 -- WHERE class_id = 255 AND race_id = 255
---   AND item_id IN (20630, 45462, 35993, 36545, 48174);
+--   AND item_id IN (20630, 35993, 36545);
 -- COMMIT;
