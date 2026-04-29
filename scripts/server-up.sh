@@ -52,6 +52,11 @@ done
 echo "==> applying server patches"
 "$REPO/scripts/apply-server-patches.sh"
 
+if [ -d "$REPO/lua/spells" ]; then
+    echo "==> deploying custom Lua spell scripts"
+    "$REPO/scripts/deploy-custom-lua.sh"
+fi
+
 # Decide whether a rebuild is needed. Cheap mtime compare: any patched
 # source file newer than the running binary means we need to rebuild.
 # Looks at the newest mtime across all *.cpp / *.h in WorldServer/ so the
