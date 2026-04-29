@@ -97,99 +97,100 @@ class ClassSpec:
     set_keywords: list[str]   # ordered preference; first match wins
     stats: list[int]          # priority stats for jewelry / weapon scoring
     primary_weapons: list[str]   # weapon name keywords for slot 0 (e.g. 'great sword', 'mace')
-    secondary: str | None        # 'shield' | 'symbol' | 'dagger' | 'orb' | None for 2H-only
+    secondary: list[str]         # ordered fallback list for offhand: 'shield' / 'symbol' / 'dagger' / 'orb'
+                                  # empty list = 2H-only (no offhand)
     ranged: list[str]            # weapon name keywords for ranged slot (bow / wand / etc.)
 
 
 CLASS_SPECS: dict[int, ClassSpec] = {
     # Plate tanks — 1H + shield, or 2H weapon. Bow ranged.
     GUARDIAN:     ClassSpec(ARMOR_PLATE,   ["vanguard", "plate"],          [STR, STA],
-                            primary_weapons=["long sword", "battle hammer", "battle axe"], secondary="shield",
+                            primary_weapons=["long sword", "battle hammer", "battle axe"], secondary=["shield"],
                             ranged=["throwing", "javelin"]),
     BERSERKER:    ClassSpec(ARMOR_PLATE,   ["vanguard", "plate"],          [STR, STA],
-                            primary_weapons=["great axe", "great sword", "double headed axe", "long sword"], secondary=None,
+                            primary_weapons=["great axe", "great sword", "double headed axe", "long sword"], secondary=[],
                             ranged=["throwing", "javelin"]),
     SHADOWKNIGHT: ClassSpec(ARMOR_PLATE,   ["vanguard", "plate"],          [STR, STA],
-                            primary_weapons=["long sword", "battle axe", "battle hammer"], secondary="shield",
+                            primary_weapons=["long sword", "battle axe", "battle hammer"], secondary=["shield"],
                             ranged=["throwing"]),
     PALADIN:      ClassSpec(ARMOR_PLATE,   ["vanguard", "plate"],          [STR, STA],
-                            primary_weapons=["long sword", "battle hammer", "mace"], secondary="shield",
+                            primary_weapons=["long sword", "battle hammer", "mace"], secondary=["shield"],
                             ranged=["throwing"]),
 
     # Plate healers — 1H mace/hammer + symbol, or 2H staff.
     TEMPLAR:      ClassSpec(ARMOR_PLATE,   ["devout", "vanguard", "plate"], [WIS, INT, STA],
-                            primary_weapons=["battle hammer", "mace", "flail"], secondary="symbol",
+                            primary_weapons=["battle hammer", "mace", "flail"], secondary=["round shield", "buckler", "symbol"],
                             ranged=["throwing"]),
     INQUISITOR:   ClassSpec(ARMOR_PLATE,   ["devout", "vanguard", "plate"], [WIS, INT, STA],
-                            primary_weapons=["battle hammer", "mace", "flail"], secondary="symbol",
+                            primary_weapons=["battle hammer", "mace", "flail"], secondary=["round shield", "buckler", "symbol"],
                             ranged=["throwing"]),
 
     # Brawlers — claws/knuckles or 2H bo staff.
     MONK:         ClassSpec(ARMOR_LEATHER, ["leather"],                    [STR, STA, AGI],
-                            primary_weapons=["claws", "knuckles", "bo staff"], secondary=None,
+                            primary_weapons=["claws", "knuckles", "bo staff"], secondary=[],
                             ranged=["throwing"]),
     BRUISER:      ClassSpec(ARMOR_LEATHER, ["leather"],                    [STR, STA, AGI],
-                            primary_weapons=["claws", "knuckles", "bo staff"], secondary=None,
+                            primary_weapons=["claws", "knuckles", "bo staff"], secondary=[],
                             ranged=["throwing"]),
 
     # Druids — staff or 1H + symbol.
     WARDEN:       ClassSpec(ARMOR_LEATHER, ["tunic", "leather"],           [WIS, INT, STA],
-                            primary_weapons=["quarter staff", "club", "fighting baton"], secondary="symbol",
+                            primary_weapons=["quarter staff", "club", "fighting baton"], secondary=["round shield", "buckler", "symbol"],
                             ranged=["throwing"]),
     FURY:         ClassSpec(ARMOR_LEATHER, ["tunic", "leather"],           [WIS, INT, STA],
-                            primary_weapons=["quarter staff", "club", "fighting baton"], secondary="symbol",
+                            primary_weapons=["quarter staff", "club", "fighting baton"], secondary=["round shield", "buckler", "symbol"],
                             ranged=["throwing"]),
 
     # Shamans — chain healers — 1H mace/club + symbol, or 2H.
     MYSTIC:       ClassSpec(ARMOR_CHAIN,   ["reverent", "chainmail", "brigandine"], [WIS, INT, STA],
-                            primary_weapons=["club", "mace", "flail"], secondary="symbol",
+                            primary_weapons=["club", "mace", "flail"], secondary=["round shield", "buckler", "symbol"],
                             ranged=["throwing"]),
     DEFILER:      ClassSpec(ARMOR_CHAIN,   ["reverent", "chainmail", "brigandine"], [WIS, INT, STA],
-                            primary_weapons=["club", "mace", "flail"], secondary="symbol",
+                            primary_weapons=["club", "mace", "flail"], secondary=["round shield", "buckler", "symbol"],
                             ranged=["throwing"]),
 
     # Scouts — dual wield daggers / dirks, or rapier.
     SWASHBUCKLER: ClassSpec(ARMOR_CHAIN,   ["brigandine", "chainmail"],    [AGI, STR, STA],
-                            primary_weapons=["rapier", "long sword", "dagger"], secondary="dagger",
+                            primary_weapons=["rapier", "long sword", "dagger"], secondary=["dagger"],
                             ranged=["short bow", "long bow"]),
     BRIGAND:      ClassSpec(ARMOR_CHAIN,   ["brigandine", "chainmail"],    [AGI, STR, STA],
-                            primary_weapons=["dagger", "dirk", "rapier"], secondary="dagger",
+                            primary_weapons=["dagger", "dirk", "rapier"], secondary=["dagger"],
                             ranged=["short bow", "long bow"]),
     RANGER:       ClassSpec(ARMOR_CHAIN,   ["brigandine", "chainmail"],    [AGI, STR, STA],
-                            primary_weapons=["dagger", "long sword"], secondary="dagger",
+                            primary_weapons=["dagger", "long sword"], secondary=["dagger"],
                             ranged=["long bow", "short bow"]),
     ASSASSIN:     ClassSpec(ARMOR_CHAIN,   ["brigandine", "chainmail"],    [AGI, STR, STA],
-                            primary_weapons=["dagger", "dirk"], secondary="dagger",
+                            primary_weapons=["dagger", "dirk"], secondary=["dagger"],
                             ranged=["long bow", "short bow"]),
 
     # Bards — rapier or longsword.
     TROUBADOUR:   ClassSpec(ARMOR_CHAIN,   ["melodic", "brigandine", "chainmail"], [INT, WIS, STA],
-                            primary_weapons=["rapier", "long sword", "dagger"], secondary="dagger",
+                            primary_weapons=["rapier", "long sword", "dagger"], secondary=["dagger"],
                             ranged=["short bow", "long bow"]),
     DIRGE:        ClassSpec(ARMOR_CHAIN,   ["melodic", "brigandine", "chainmail"], [INT, WIS, STA],
-                            primary_weapons=["rapier", "long sword", "dagger"], secondary="dagger",
+                            primary_weapons=["rapier", "long sword", "dagger"], secondary=["dagger"],
                             ranged=["short bow", "long bow"]),
 
     # Cloth DPS — staff or wand. Wand goes in ranged slot.
     WIZARD:       ClassSpec(ARMOR_CLOTH,   ["robe", "blouse"],             [INT, WIS, STA],
-                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=None,
+                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=[],
                             ranged=["wand"]),
     WARLOCK:      ClassSpec(ARMOR_CLOTH,   ["robe", "blouse"],             [INT, WIS, STA],
-                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=None,
+                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=[],
                             ranged=["wand"]),
     CONJUROR:     ClassSpec(ARMOR_CLOTH,   ["robe", "blouse"],             [INT, WIS, STA],
-                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=None,
+                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=[],
                             ranged=["wand"]),
     NECROMANCER:  ClassSpec(ARMOR_CLOTH,   ["robe", "blouse"],             [INT, WIS, STA],
-                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=None,
+                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=[],
                             ranged=["wand"]),
 
     # Cloth buffs (enchanters)
     ILLUSIONIST:  ClassSpec(ARMOR_CLOTH,   ["blouse", "robe"],             [INT, WIS, STA],
-                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=None,
+                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=[],
                             ranged=["wand"]),
     COERCER:      ClassSpec(ARMOR_CLOTH,   ["blouse", "robe"],             [INT, WIS, STA],
-                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=None,
+                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=[],
                             ranged=["wand"]),
 }
 
@@ -305,7 +306,12 @@ def check_offline(name: str) -> str | None:
 # Item catalog queries
 # ---------------------------------------------------------------------------
 
-SUBQUALITY_REGEX = "^(crude|shaped|forged|fashioned|tailored|blessed|conditioned|pristine|crude forged|shaped forged|crude tailored|shaped tailored) "
+# Only "crude" and "shaped" are unambiguous craft-failure prefixes.
+# "Forged X" / "Fashioned X" / "Tailored X" are the PRISTINE final names
+# for many item types (jewelry uses "Fashioned", cloth uses "Tailored",
+# metal weapons sometimes use "Forged"). Excluding them dropped bracelets,
+# belts, and other valid mastercrafted items from the picks.
+SUBQUALITY_REGEX = "^(crude|shaped) "
 
 
 def _armor_query(cursor, name_pattern: str, level: int, slot_bit: int, class_id: int) -> dict | None:
@@ -360,7 +366,31 @@ def find_armor(cursor, class_id: int, level: int, slot_bit: int) -> dict | None:
         if row:
             return row
 
-    return None
+    # Final fallback: any mastercrafted item the class can wear in this
+    # slot. Catches belts (Cuirboilli Leather Belt — leather material
+    # regardless of armor type), cloaks, and other non-armor-set pieces
+    # that don't follow the chain/plate/etc. material naming.
+    band = band_for_armor(level)
+    if band is None:
+        return None
+    band_lo = band - 5
+    cursor.execute(
+        """
+        SELECT id, name, required_level, recommended_level
+          FROM items
+         WHERE item_type IN ('Armor', 'Normal')
+           AND crafted = 1
+           AND id < 10000000
+           AND required_level BETWEEN %s AND %s
+           AND (slots & %s) > 0
+           AND ((adventure_classes >> %s) & 1) = 1
+           AND LOWER(name) NOT REGEXP %s
+         ORDER BY required_level DESC, id ASC
+         LIMIT 1
+        """,
+        (band_lo, level, slot_bit, class_id, SUBQUALITY_REGEX),
+    )
+    return cursor.fetchone()
 
 
 def find_jewelry(cursor, class_id: int, level: int, slot_bit: int) -> dict | None:
@@ -453,13 +483,10 @@ def find_jewelry(cursor, class_id: int, level: int, slot_bit: int) -> dict | Non
     return cursor.fetchone()
 
 
-# Map "secondary" archetype label → name keywords / item types to look for.
-SECONDARY_KEYWORDS = {
-    "shield": (["kite shield", "round shield", "tower shield", "buckler", "roundshield"], ["Shield"]),
-    "symbol": (["symbol"], ["Shield"]),  # symbols use the shield slot
-    "dagger": (["dagger", "dirk"], ["Weapon"]),
-    "orb":    (["orb"], ["Shield"]),
-}
+# Each secondary entry in ClassSpec.secondary is a literal item-name
+# keyword. Look across both Weapon and Shield item types — symbols and
+# round shields are both Shield-type, daggers are Weapon-type.
+SECONDARY_ITEM_TYPES = ["Weapon", "Shield"]
 
 
 def find_weapon(cursor, class_id: int, level: int, slot_bit: int,
@@ -593,11 +620,12 @@ def collect_gear(cursor, class_id: int, level: int) -> list[tuple[str, int, dict
     if row:
         out.append(("primary", primary_slot_id, row))
 
-    # Secondary (shield/symbol/dagger) — only if class wields one.
+    # Secondary (shield/symbol/dagger) — try each entry in spec.secondary
+    # in order; first match wins. Empty list means class is 2H-only.
     if spec.secondary:
         sec_slot_id, sec_slot_bit = WEAPON_SLOTS["secondary"]
-        keywords, types = SECONDARY_KEYWORDS[spec.secondary]
-        row = find_weapon(cursor, class_id, level, sec_slot_bit, keywords, types)
+        row = find_weapon(cursor, class_id, level, sec_slot_bit,
+                          spec.secondary, SECONDARY_ITEM_TYPES)
         if row:
             out.append(("secondary", sec_slot_id, row))
 
