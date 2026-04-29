@@ -75,6 +75,16 @@ TROUBADOUR, DIRGE = 36, 37
 # ITEM_STAT_* indices from Items.h (item_stats.subtype where type=0):
 STR, STA, AGI, WIS, INT = 0, 1, 2, 3, 4
 
+# Jewelry name → stat keyword. Mastercrafted jewelry naming convention is
+# "Imbued [Material] [Type] of [StatName]" — match the StatName.
+STAT_NAMES = {
+    STR: "Strength",
+    STA: "Stamina",
+    AGI: "Agility",
+    WIS: "Wisdom",
+    INT: "Intelligence",
+}
+
 ARMOR_PLATE = "plate"
 ARMOR_CHAIN = "chain"
 ARMOR_LEATHER = "leather"
@@ -86,50 +96,101 @@ class ClassSpec:
     armor_type: str
     set_keywords: list[str]   # ordered preference; first match wins
     stats: list[int]          # priority stats for jewelry / weapon scoring
+    primary_weapons: list[str]   # weapon name keywords for slot 0 (e.g. 'great sword', 'mace')
+    secondary: str | None        # 'shield' | 'symbol' | 'dagger' | 'orb' | None for 2H-only
+    ranged: list[str]            # weapon name keywords for ranged slot (bow / wand / etc.)
 
 
 CLASS_SPECS: dict[int, ClassSpec] = {
-    # Plate tanks
-    GUARDIAN:     ClassSpec(ARMOR_PLATE,   ["vanguard", "plate"],          [STR, STA]),
-    BERSERKER:    ClassSpec(ARMOR_PLATE,   ["vanguard", "plate"],          [STR, STA]),
-    SHADOWKNIGHT: ClassSpec(ARMOR_PLATE,   ["vanguard", "plate"],          [STR, STA]),
-    PALADIN:      ClassSpec(ARMOR_PLATE,   ["vanguard", "plate"],          [STR, STA]),
+    # Plate tanks — 1H + shield, or 2H weapon. Bow ranged.
+    GUARDIAN:     ClassSpec(ARMOR_PLATE,   ["vanguard", "plate"],          [STR, STA],
+                            primary_weapons=["long sword", "battle hammer", "battle axe"], secondary="shield",
+                            ranged=["throwing", "javelin"]),
+    BERSERKER:    ClassSpec(ARMOR_PLATE,   ["vanguard", "plate"],          [STR, STA],
+                            primary_weapons=["great axe", "great sword", "double headed axe", "long sword"], secondary=None,
+                            ranged=["throwing", "javelin"]),
+    SHADOWKNIGHT: ClassSpec(ARMOR_PLATE,   ["vanguard", "plate"],          [STR, STA],
+                            primary_weapons=["long sword", "battle axe", "battle hammer"], secondary="shield",
+                            ranged=["throwing"]),
+    PALADIN:      ClassSpec(ARMOR_PLATE,   ["vanguard", "plate"],          [STR, STA],
+                            primary_weapons=["long sword", "battle hammer", "mace"], secondary="shield",
+                            ranged=["throwing"]),
 
-    # Plate healers — fall back to vanguard/plate when devout isn't in tier.
-    TEMPLAR:      ClassSpec(ARMOR_PLATE,   ["devout", "vanguard", "plate"],            [WIS, INT]),
-    INQUISITOR:   ClassSpec(ARMOR_PLATE,   ["devout", "vanguard", "plate"],            [WIS, INT]),
+    # Plate healers — 1H mace/hammer + symbol, or 2H staff.
+    TEMPLAR:      ClassSpec(ARMOR_PLATE,   ["devout", "vanguard", "plate"], [WIS, INT, STA],
+                            primary_weapons=["battle hammer", "mace", "flail"], secondary="symbol",
+                            ranged=["throwing"]),
+    INQUISITOR:   ClassSpec(ARMOR_PLATE,   ["devout", "vanguard", "plate"], [WIS, INT, STA],
+                            primary_weapons=["battle hammer", "mace", "flail"], secondary="symbol",
+                            ranged=["throwing"]),
 
-    # Leather tanks (brawlers)
-    MONK:         ClassSpec(ARMOR_LEATHER, ["leather"],                                [STR, STA]),
-    BRUISER:      ClassSpec(ARMOR_LEATHER, ["leather"],                                [STR, STA]),
+    # Brawlers — claws/knuckles or 2H bo staff.
+    MONK:         ClassSpec(ARMOR_LEATHER, ["leather"],                    [STR, STA, AGI],
+                            primary_weapons=["claws", "knuckles", "bo staff"], secondary=None,
+                            ranged=["throwing"]),
+    BRUISER:      ClassSpec(ARMOR_LEATHER, ["leather"],                    [STR, STA, AGI],
+                            primary_weapons=["claws", "knuckles", "bo staff"], secondary=None,
+                            ranged=["throwing"]),
 
-    # Leather healers (druids) — fall back to tunic, then leather.
-    WARDEN:       ClassSpec(ARMOR_LEATHER, ["tunic", "leather"],                       [WIS, INT, STA]),
-    FURY:         ClassSpec(ARMOR_LEATHER, ["tunic", "leather"],                       [WIS, INT, STA]),
+    # Druids — staff or 1H + symbol.
+    WARDEN:       ClassSpec(ARMOR_LEATHER, ["tunic", "leather"],           [WIS, INT, STA],
+                            primary_weapons=["quarter staff", "club", "fighting baton"], secondary="symbol",
+                            ranged=["throwing"]),
+    FURY:         ClassSpec(ARMOR_LEATHER, ["tunic", "leather"],           [WIS, INT, STA],
+                            primary_weapons=["quarter staff", "club", "fighting baton"], secondary="symbol",
+                            ranged=["throwing"]),
 
-    # Chain healers (shamans) — reverent ≈ healer chain; chainmail at low tier.
-    MYSTIC:       ClassSpec(ARMOR_CHAIN,   ["reverent", "chainmail", "brigandine"],    [WIS, INT, STA]),
-    DEFILER:      ClassSpec(ARMOR_CHAIN,   ["reverent", "chainmail", "brigandine"],    [WIS, INT, STA]),
+    # Shamans — chain healers — 1H mace/club + symbol, or 2H.
+    MYSTIC:       ClassSpec(ARMOR_CHAIN,   ["reverent", "chainmail", "brigandine"], [WIS, INT, STA],
+                            primary_weapons=["club", "mace", "flail"], secondary="symbol",
+                            ranged=["throwing"]),
+    DEFILER:      ClassSpec(ARMOR_CHAIN,   ["reverent", "chainmail", "brigandine"], [WIS, INT, STA],
+                            primary_weapons=["club", "mace", "flail"], secondary="symbol",
+                            ranged=["throwing"]),
 
-    # Chain DPS (scouts)
-    SWASHBUCKLER: ClassSpec(ARMOR_CHAIN,   ["brigandine", "chainmail"],                [AGI, STR, STA]),
-    BRIGAND:      ClassSpec(ARMOR_CHAIN,   ["brigandine", "chainmail"],                [AGI, STR, STA]),
-    RANGER:       ClassSpec(ARMOR_CHAIN,   ["brigandine", "chainmail"],                [AGI, STR, STA]),
-    ASSASSIN:     ClassSpec(ARMOR_CHAIN,   ["brigandine", "chainmail"],                [AGI, STR, STA]),
+    # Scouts — dual wield daggers / dirks, or rapier.
+    SWASHBUCKLER: ClassSpec(ARMOR_CHAIN,   ["brigandine", "chainmail"],    [AGI, STR, STA],
+                            primary_weapons=["rapier", "long sword", "dagger"], secondary="dagger",
+                            ranged=["short bow", "long bow"]),
+    BRIGAND:      ClassSpec(ARMOR_CHAIN,   ["brigandine", "chainmail"],    [AGI, STR, STA],
+                            primary_weapons=["dagger", "dirk", "rapier"], secondary="dagger",
+                            ranged=["short bow", "long bow"]),
+    RANGER:       ClassSpec(ARMOR_CHAIN,   ["brigandine", "chainmail"],    [AGI, STR, STA],
+                            primary_weapons=["dagger", "long sword"], secondary="dagger",
+                            ranged=["long bow", "short bow"]),
+    ASSASSIN:     ClassSpec(ARMOR_CHAIN,   ["brigandine", "chainmail"],    [AGI, STR, STA],
+                            primary_weapons=["dagger", "dirk"], secondary="dagger",
+                            ranged=["long bow", "short bow"]),
 
-    # Chain buffs (bards) — melodic ≈ bard chain; brigandine generic at low tier.
-    TROUBADOUR:   ClassSpec(ARMOR_CHAIN,   ["melodic", "brigandine", "chainmail"],     [INT, WIS, STA]),
-    DIRGE:        ClassSpec(ARMOR_CHAIN,   ["melodic", "brigandine", "chainmail"],     [INT, WIS, STA]),
+    # Bards — rapier or longsword.
+    TROUBADOUR:   ClassSpec(ARMOR_CHAIN,   ["melodic", "brigandine", "chainmail"], [INT, WIS, STA],
+                            primary_weapons=["rapier", "long sword", "dagger"], secondary="dagger",
+                            ranged=["short bow", "long bow"]),
+    DIRGE:        ClassSpec(ARMOR_CHAIN,   ["melodic", "brigandine", "chainmail"], [INT, WIS, STA],
+                            primary_weapons=["rapier", "long sword", "dagger"], secondary="dagger",
+                            ranged=["short bow", "long bow"]),
 
-    # Cloth DPS
-    WIZARD:       ClassSpec(ARMOR_CLOTH,   ["robe", "blouse"],             [INT, WIS, STA]),
-    WARLOCK:      ClassSpec(ARMOR_CLOTH,   ["robe", "blouse"],             [INT, WIS, STA]),
-    CONJUROR:     ClassSpec(ARMOR_CLOTH,   ["robe", "blouse"],             [INT, WIS, STA]),
-    NECROMANCER:  ClassSpec(ARMOR_CLOTH,   ["robe", "blouse"],             [INT, WIS, STA]),
+    # Cloth DPS — staff or wand. Wand goes in ranged slot.
+    WIZARD:       ClassSpec(ARMOR_CLOTH,   ["robe", "blouse"],             [INT, WIS, STA],
+                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=None,
+                            ranged=["wand"]),
+    WARLOCK:      ClassSpec(ARMOR_CLOTH,   ["robe", "blouse"],             [INT, WIS, STA],
+                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=None,
+                            ranged=["wand"]),
+    CONJUROR:     ClassSpec(ARMOR_CLOTH,   ["robe", "blouse"],             [INT, WIS, STA],
+                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=None,
+                            ranged=["wand"]),
+    NECROMANCER:  ClassSpec(ARMOR_CLOTH,   ["robe", "blouse"],             [INT, WIS, STA],
+                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=None,
+                            ranged=["wand"]),
 
     # Cloth buffs (enchanters)
-    ILLUSIONIST:  ClassSpec(ARMOR_CLOTH,   ["blouse", "robe"],             [INT, WIS, STA]),
-    COERCER:      ClassSpec(ARMOR_CLOTH,   ["blouse", "robe"],             [INT, WIS, STA]),
+    ILLUSIONIST:  ClassSpec(ARMOR_CLOTH,   ["blouse", "robe"],             [INT, WIS, STA],
+                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=None,
+                            ranged=["wand"]),
+    COERCER:      ClassSpec(ARMOR_CLOTH,   ["blouse", "robe"],             [INT, WIS, STA],
+                            primary_weapons=["greatstaff", "spellbinders staff", "quarter staff", "dagger"], secondary=None,
+                            ranged=["wand"]),
 }
 
 # Material per armor-type per band. Bands are a level FLOOR — L42 covers
@@ -187,7 +248,14 @@ JEWELRY_SLOTS = {
     "charm_2":     (21, 1 << 21),
 }
 
-ALL_SLOTS = {**ARMOR_SLOTS, **JEWELRY_SLOTS}
+# Weapon slots.
+WEAPON_SLOTS = {
+    "primary":   (0,  1 << 0),
+    "secondary": (1,  1 << 1),
+    "ranged":    (16, 1 << 16),
+}
+
+ALL_SLOTS = {**ARMOR_SLOTS, **JEWELRY_SLOTS, **WEAPON_SLOTS}
 
 
 # ---------------------------------------------------------------------------
@@ -296,38 +364,143 @@ def find_armor(cursor, class_id: int, level: int, slot_bit: int) -> dict | None:
 
 
 def find_jewelry(cursor, class_id: int, level: int, slot_bit: int) -> dict | None:
-    """Return best-matching Treasured jewelry for (class, level, slot)
-    that matches the class's stat priority."""
+    """Return best-matching MASTERCRAFTED jewelry for (class, level, slot).
+
+    Three-pass match:
+      1. Imbued + "of <PriorityStat>" naming (Imbued Jasper Ring of Wisdom)
+         — only exists for ring/charm slots in this DB.
+      2. Any Imbued mastercrafted (Imbued Jasper Ring) — fewer matches but
+         broader slot coverage.
+      3. Any non-Imbued pristine mastercrafted (Jasper Orb, Gold Symbol)
+         — covers ears/neck/wrist/symbol/orb slots that don't get Imbued
+         versions.
+
+    All passes require crafted=1 and exclude sub-quality crafting prefixes.
+    Returns None for slots that have no mastercrafted option in this tier
+    — better than picking a quest-reward drop (operator wants MC only).
+    """
     spec = CLASS_SPECS.get(class_id)
     if not spec:
         return None
     band = band_for_jewelry(level)
     if band is None:
         return None
-    # Treasured jewelry typically has required_level == band exactly (the
-    # tier breakpoint is encoded as the level requirement). Allow ±1 just
-    # in case content drift.
+    lo, hi = band - 3, band + 5
+    if hi > level:
+        hi = level
+
+    # Pass 1: Imbued + "of Stat"
+    for stat in spec.stats:
+        stat_word = STAT_NAMES[stat].lower()
+        cursor.execute(
+            """
+            SELECT i.id, i.name, i.required_level
+              FROM items i
+             WHERE i.crafted = 1
+               AND i.id < 10000000
+               AND i.required_level BETWEEN %s AND %s
+               AND (i.slots & %s) > 0
+               AND ((i.adventure_classes >> %s) & 1) = 1
+               AND LOWER(i.name) LIKE 'imbued %%'
+               AND LOWER(i.name) LIKE %s
+               AND LOWER(i.name) NOT REGEXP %s
+             ORDER BY i.required_level DESC, i.id ASC
+             LIMIT 1
+            """,
+            (lo, hi, slot_bit, class_id, f"%of {stat_word}%", SUBQUALITY_REGEX),
+        )
+        row = cursor.fetchone()
+        if row:
+            return row
+
+    # Pass 2: any Imbued mastercrafted
     cursor.execute(
         """
         SELECT i.id, i.name, i.required_level
           FROM items i
-         WHERE i.item_type IN ('Armor', 'Normal')
-           AND i.crafted = 0
+         WHERE i.crafted = 1
+           AND i.id < 10000000
            AND i.required_level BETWEEN %s AND %s
            AND (i.slots & %s) > 0
            AND ((i.adventure_classes >> %s) & 1) = 1
-           AND EXISTS (
-                 SELECT 1 FROM item_stats s
-                  WHERE s.item_id = i.id
-                    AND s.type = 0
-                    AND s.subtype IN %s
-           )
+           AND LOWER(i.name) LIKE 'imbued %%'
+           AND LOWER(i.name) NOT REGEXP %s
          ORDER BY i.required_level DESC, i.id ASC
          LIMIT 1
         """,
-        (band - 1, band + 1, slot_bit, class_id, tuple(spec.stats)),
+        (lo, hi, slot_bit, class_id, SUBQUALITY_REGEX),
+    )
+    row = cursor.fetchone()
+    if row:
+        return row
+
+    # Pass 3: any pristine mastercrafted (no Imbued prefix)
+    cursor.execute(
+        """
+        SELECT i.id, i.name, i.required_level
+          FROM items i
+         WHERE i.crafted = 1
+           AND i.id < 10000000
+           AND i.required_level BETWEEN %s AND %s
+           AND (i.slots & %s) > 0
+           AND ((i.adventure_classes >> %s) & 1) = 1
+           AND LOWER(i.name) NOT REGEXP %s
+         ORDER BY i.required_level DESC, i.id ASC
+         LIMIT 1
+        """,
+        (lo, hi, slot_bit, class_id, SUBQUALITY_REGEX),
     )
     return cursor.fetchone()
+
+
+# Map "secondary" archetype label → name keywords / item types to look for.
+SECONDARY_KEYWORDS = {
+    "shield": (["kite shield", "round shield", "tower shield", "buckler", "roundshield"], ["Shield"]),
+    "symbol": (["symbol"], ["Shield"]),  # symbols use the shield slot
+    "dagger": (["dagger", "dirk"], ["Weapon"]),
+    "orb":    (["orb"], ["Shield"]),
+}
+
+
+def find_weapon(cursor, class_id: int, level: int, slot_bit: int,
+                keywords: list[str], item_types: list[str]) -> dict | None:
+    """Pick a mastercrafted weapon (or shield) matching one of the listed
+    keywords. Tries each keyword in order; first hit wins.
+
+    The materials are not constrained — wood-based (fir, briarwood,
+    etc.) and metal (steel, ebon) both ship as 'Imbued [Material] X' at
+    matching required_levels."""
+    band = band_for_armor(level)
+    if band is None:
+        return None
+    # Weapons follow armor tier breakpoints reasonably (required_level 22
+    # for L22 band etc.). Allow a bit of drift.
+    lo, hi = band - 3, level
+    type_placeholders = ", ".join(["%s"] * len(item_types))
+    # Two passes per keyword: imbued first, then plain mastercrafted.
+    for kw in keywords:
+        for prefix in ["imbued %", "%"]:
+            cursor.execute(
+                f"""
+                SELECT i.id, i.name, i.required_level
+                  FROM items i
+                 WHERE i.item_type IN ({type_placeholders})
+                   AND i.crafted = 1
+                   AND i.id < 10000000
+                   AND i.required_level BETWEEN %s AND %s
+                   AND (i.slots & %s) > 0
+                   AND ((i.adventure_classes >> %s) & 1) = 1
+                   AND LOWER(i.name) LIKE %s
+                   AND LOWER(i.name) NOT REGEXP %s
+                 ORDER BY i.required_level DESC, i.id ASC
+                 LIMIT 1
+                """,
+                (*item_types, lo, hi, slot_bit, class_id, f"{prefix}{kw}%", SUBQUALITY_REGEX),
+            )
+            row = cursor.fetchone()
+            if row:
+                return row
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -396,16 +569,46 @@ def next_free_inv_slot(cursor, char_id: int, bag_id: int) -> int:
 # ---------------------------------------------------------------------------
 
 def collect_gear(cursor, class_id: int, level: int) -> list[tuple[str, int, dict]]:
-    """Return list of (slot_label, slot_id, item_row) for armor + jewelry."""
+    """Return list of (slot_label, slot_id, item_row) for armor + jewelry +
+    weapons."""
+    spec = CLASS_SPECS.get(class_id)
+    if not spec:
+        return []
     out = []
+
     for label, (slot_id, slot_bit) in ARMOR_SLOTS.items():
         row = find_armor(cursor, class_id, level, slot_bit)
         if row:
             out.append((label, slot_id, row))
+
     for label, (slot_id, slot_bit) in JEWELRY_SLOTS.items():
         row = find_jewelry(cursor, class_id, level, slot_bit)
         if row:
             out.append((label, slot_id, row))
+
+    # Primary weapon
+    primary_slot_id, primary_slot_bit = WEAPON_SLOTS["primary"]
+    row = find_weapon(cursor, class_id, level, primary_slot_bit,
+                      spec.primary_weapons, ["Weapon"])
+    if row:
+        out.append(("primary", primary_slot_id, row))
+
+    # Secondary (shield/symbol/dagger) — only if class wields one.
+    if spec.secondary:
+        sec_slot_id, sec_slot_bit = WEAPON_SLOTS["secondary"]
+        keywords, types = SECONDARY_KEYWORDS[spec.secondary]
+        row = find_weapon(cursor, class_id, level, sec_slot_bit, keywords, types)
+        if row:
+            out.append(("secondary", sec_slot_id, row))
+
+    # Ranged
+    if spec.ranged:
+        rng_slot_id, rng_slot_bit = WEAPON_SLOTS["ranged"]
+        row = find_weapon(cursor, class_id, level, rng_slot_bit,
+                          spec.ranged, ["Weapon", "Ranged"])
+        if row:
+            out.append(("ranged", rng_slot_id, row))
+
     return out
 
 
