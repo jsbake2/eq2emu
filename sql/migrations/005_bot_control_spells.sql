@@ -63,25 +63,25 @@ VALUES
    2, 0, 0, 1, 'Spells/Commoner/BotPrepull.lua', 408, 317, 1, 1, 1, 2, '', ''),
   (2560002, 'Bot Camp All',
    'Camp every group mercenary you own at once.',
-   2, 0, 0, 1, 'Spells/Commoner/BotCampAll.lua', 1006, 317, 1, 1, 1, 2, '', ''),
+   2, 0, 0, 1, 'Spells/Commoner/BotCampAll.lua', 17, 317, 1, 1, 1, 2, '', ''),
   (2560003, 'Bot Summon All',
    'Summon every group mercenary you own to your location.',
-   2, 0, 0, 1, 'Spells/Commoner/BotSummonAll.lua', 1031, 317, 1, 1, 1, 2, '', ''),
+   2, 0, 0, 1, 'Spells/Commoner/BotSummonAll.lua', 230, 317, 1, 1, 1, 2, '', ''),
   (2560011, 'Bot Spawn 1',
    'Spawn the bot in your roster slot 1 (matches /bot list).',
-   2, 0, 0, 1, 'Spells/Commoner/BotSpawn1.lua', 1100, 317, 1, 1, 1, 2, '', ''),
+   2, 0, 0, 1, 'Spells/Commoner/BotSpawn1.lua', 218, 317, 1, 1, 1, 2, '', ''),
   (2560012, 'Bot Spawn 2',
    'Spawn the bot in your roster slot 2.',
-   2, 0, 0, 1, 'Spells/Commoner/BotSpawn2.lua', 1101, 317, 1, 1, 1, 2, '', ''),
+   2, 0, 0, 1, 'Spells/Commoner/BotSpawn2.lua', 280, 317, 1, 1, 1, 2, '', ''),
   (2560013, 'Bot Spawn 3',
    'Spawn the bot in your roster slot 3.',
-   2, 0, 0, 1, 'Spells/Commoner/BotSpawn3.lua', 1102, 317, 1, 1, 1, 2, '', ''),
+   2, 0, 0, 1, 'Spells/Commoner/BotSpawn3.lua', 235, 317, 1, 1, 1, 2, '', ''),
   (2560014, 'Bot Spawn 4',
    'Spawn the bot in your roster slot 4.',
-   2, 0, 0, 1, 'Spells/Commoner/BotSpawn4.lua', 1103, 317, 1, 1, 1, 2, '', ''),
+   2, 0, 0, 1, 'Spells/Commoner/BotSpawn4.lua', 184, 317, 1, 1, 1, 2, '', ''),
   (2560015, 'Bot Spawn 5',
    'Spawn the bot in your roster slot 5.',
-   2, 0, 0, 1, 'Spells/Commoner/BotSpawn5.lua', 1104, 317, 1, 1, 1, 2, '', '');
+   2, 0, 0, 1, 'Spells/Commoner/BotSpawn5.lua', 224, 317, 1, 1, 1, 2, '', '');
 
 -- ============================================================================
 -- spell_tiers — instant cast, no power cost. Recast scales with risk:
