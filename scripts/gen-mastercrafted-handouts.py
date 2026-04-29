@@ -488,6 +488,17 @@ section.coll > h4 .lvl { color: var(--muted); font-size: .8rem; font-weight: 400
                 border-radius: 4px; padding: .25rem .7rem; font-size: .78rem; cursor: pointer;
                 margin-top: .35rem; font-family: inherit; }
 .filter-clear:hover { color: var(--fg); border-color: var(--accent); }
+/* Rarity chips wear their color on the left border so users see the
+   palette before clicking. Active state uses the rarity color as fill. */
+.rarity-pill { border-left-width: 3px; }
+.rarity-pill.rarity-normal     { border-left-color: #ffffff; }
+.rarity-pill.rarity-treasured  { border-left-color: #4a8fe0; }
+.rarity-pill.rarity-legendary  { border-left-color: #ff8c2a; }
+.rarity-pill.rarity-fabled     { border-left-color: #d43838; }
+.rarity-pill.rarity-normal.active    { background: #ffffff; color: #16181c; }
+.rarity-pill.rarity-treasured.active { background: #4a8fe0; color: #16181c; }
+.rarity-pill.rarity-legendary.active { background: #ff8c2a; color: #16181c; }
+.rarity-pill.rarity-fabled.active    { background: #d43838; color: #ffffff; }
 code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .85em; }
 header.tabs { display: flex; gap: .25rem; padding: .8rem 1.5rem 0; background: #16181c;
@@ -638,6 +649,7 @@ const search = document.getElementById('search');
 // AND with the search-box tokens.
 const slotChips = document.querySelectorAll('[data-filter-slot]');
 const armorChips = document.querySelectorAll('[data-filter-armor]');
+const rarityChips = document.querySelectorAll('[data-filter-rarity]');
 const filterClearBtn = document.getElementById('filter-clear');
 
 function activeSet(nodes, attr) {
@@ -650,15 +662,18 @@ function applyFilters() {
   const tokens = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const wantSlots = activeSet(slotChips, 'filterSlot');
   const wantArmor = activeSet(armorChips, 'filterArmor');
+  const wantRarity = activeSet(rarityChips, 'filterRarity');
   document.querySelectorAll('section.type').forEach(typeSec => {
     let any = false;
     typeSec.querySelectorAll('.item').forEach(it => {
       const hay = it.dataset.search || '';
       const slots = (it.dataset.slots || '').split(' ').filter(Boolean);
       const armor = it.dataset.armor || '';
+      const rarity = it.dataset.rarity || '';
       let show = !tokens.length || tokens.every(t => hay.includes(t));
       if (show && wantSlots.size) show = slots.some(s => wantSlots.has(s));
       if (show && wantArmor.size) show = wantArmor.has(armor);
+      if (show && wantRarity.size) show = wantRarity.has(rarity);
       it.style.display = show ? '' : 'none';
       if (show) any = true;
     });
@@ -679,10 +694,15 @@ armorChips.forEach(c => c.addEventListener('click', () => {
   c.classList.toggle('active');
   applyFilters();
 }));
+rarityChips.forEach(c => c.addEventListener('click', () => {
+  c.classList.toggle('active');
+  applyFilters();
+}));
 if (filterClearBtn) {
   filterClearBtn.addEventListener('click', () => {
     slotChips.forEach(c => c.classList.remove('active'));
     armorChips.forEach(c => c.classList.remove('active'));
+    rarityChips.forEach(c => c.classList.remove('active'));
     search.value = '';
     applyFilters();
   });
@@ -784,6 +804,13 @@ def render(gear_rows, consumable_rows, container_rows, dropped_rows, collections
     for t in ("plate", "chain", "leather", "cloth"):
         filter_rows.append(f'<button type="button" class="filter-chip" data-filter-armor="{t}">{t}</button>')
     filter_rows.append('</div>')
+    filter_rows.append('<div class="filter-row"><span class="filter-label">Rarity:</span>')
+    for t in ("normal", "treasured", "legendary", "fabled"):
+        filter_rows.append(
+            f'<button type="button" class="filter-chip rarity-pill rarity-{t}" '
+            f'data-filter-rarity="{t}">{t}</button>'
+        )
+    filter_rows.append('</div>')
     filter_rows.append('<button type="button" id="filter-clear" class="filter-clear">Clear filters</button>')
     filter_rows.append('</div>')
 
@@ -829,6 +856,7 @@ def render(gear_rows, consumable_rows, container_rows, dropped_rows, collections
                     lvl = effective_level(r["required_level"], r["recommended_level"])
                     name = r["name"].strip()
                     rarity = rarity_class(r.get("tier"))
+                    rarity_short = rarity.removeprefix("rarity-")
                     slots_attr = " ".join(slot_tags(r.get("slots") or 0))
                     armor_attr = armor_type_tag(name) or ""
                     search_blob = f'{name.lower()} {r["id"]} {typ.lower()}'
@@ -836,7 +864,8 @@ def render(gear_rows, consumable_rows, container_rows, dropped_rows, collections
                         f'<div class="item {rarity}" '
                         f'data-search="{html.escape(search_blob, quote=True)}" '
                         f'data-slots="{html.escape(slots_attr, quote=True)}" '
-                        f'data-armor="{html.escape(armor_attr, quote=True)}">'
+                        f'data-armor="{html.escape(armor_attr, quote=True)}" '
+                        f'data-rarity="{rarity_short}">'
                         f'<button class="copy" data-itemid="{r["id"]}" type="button">copy</button>'
                         f'<span class="name">{html.escape(name)} '
                         f'<span class="lvl">&middot; lvl {lvl}</span></span>'
