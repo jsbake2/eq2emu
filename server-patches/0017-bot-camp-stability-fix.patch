@@ -1,0 +1,40 @@
+# Force a seq_cst fence after `camping = false` at the end of Bot::Begin_Camp.
+#
+# Symptom (after 0015 + 0016 landed): freshly-summoned bots ran their
+# opening buff cycle, then despawned ~5 seconds later. Tracing showed
+# Begin_Camp() looping every tick on bots that had no group (gmi NULL),
+# meaning the atomic `camping` flag was reading true even though the
+# end of Begin_Camp writes it to false on every call. Bot::Camp() —
+# the only path that sets camping=true — was never being entered.
+#
+# Repro evidence: with debug LogWrite calls scattered at function
+# entries, Begin_Camp's `camping = false` write became observable to
+# the next tick. Strip the LogWrites, the symptom returns. Add a
+# single std::atomic_thread_fence(seq_cst) after the write, the
+# symptom is gone.
+#
+# Best-guess root cause: an aggressive optimization pass (LTO + the
+# layout shift introduced by patch 0015 adding m_forceWards/m_aoeEnabled
+# adjacent to the atomic) was eliminating or reordering the `camping`
+# store. The fence forces the compiler to keep it. The fence emits
+# nothing on x86 beyond the implicit serializing nature of the prior
+# seq_cst store, so cost is zero.
+#
+# Pairs with: 0015-bot-aoe-toggle-and-aggro-guard.patch (which
+# introduced the m_forceWards / m_aoeEnabled fields whose presence
+# seems to have flipped the optimizer's behavior).
+
+--- a/source/WorldServer/Bots/Bot.cpp	2026-04-30 00:41:29.186798868 -0500
++++ b/source/WorldServer/Bots/Bot.cpp	2026-04-30 00:41:29.172294737 -0500
+@@ -901,6 +901,11 @@
+ 
+ 	camping = false;
+ 	immediate_camp = true;
++	// Force the seq_cst store of camping=false to be observable to the
++	// zone tick before this function returns. Without this, an aggressive
++	// compile pass was reordering or eliding the store and Begin_Camp
++	// fired in a tight loop on every tick after the first camping=true.
++	std::atomic_thread_fence(std::memory_order_seq_cst);
+ 	
+ 	if (!GetOwner())
+ 		return;
