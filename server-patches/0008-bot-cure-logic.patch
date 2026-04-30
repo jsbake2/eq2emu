@@ -37,7 +37,7 @@ diff --git a/source/WorldServer/Bots/Bot.h b/source/WorldServer/Bots/Bot.h
 diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
 --- a/source/WorldServer/Bots/Bot.cpp
 +++ b/source/WorldServer/Bots/Bot.cpp
-@@ -743,7 +743,89 @@
+@@ -743,7 +743,104 @@
  Spell* Bot::GetCureSpell() {
  	if(world.IsReloadingSubsystems())
  		return nullptr;
@@ -45,27 +45,6 @@ diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
 +
 +	if (cure_spells.empty())
 +		return 0;
-+
-+	// Build prioritized target list: self → owner → other group members.
-+	// Self first because a stunned/silenced bot can't cast on others anyway.
-+	vector<Entity*> candidates;
-+	candidates.push_back(this);
-+	if (GetOwner() && GetOwner()->IsEntity() && GetOwner() != this)
-+		candidates.push_back((Entity*)GetOwner());
-+	GroupMemberInfo* gmi = GetGroupMemberInfo();
-+	if (gmi) {
-+		PlayerGroup* group = world.GetGroupManager()->GetGroup(gmi->group_id);
-+		if (group) {
-+			group->MGroupMembers.readlock(__FUNCTION__, __LINE__);
-+			deque<GroupMemberInfo*>* members = group->GetMembers();
-+			for (int8 i = 0; i < members->size(); i++) {
-+				Entity* m = members->at(i)->member;
-+				if (m && m != this && m != GetOwner())
-+					candidates.push_back(m);
-+			}
-+			group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
-+		}
-+	}
 +
 +	// Cure curse first (most punishing if left up), then trauma/arcane/noxious/
 +	// elemental in that priority order — same default order EQ2 priests teach.
@@ -75,54 +54,90 @@ diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
 +	};
 +	const size_t priority_count = sizeof(det_priority) / sizeof(det_priority[0]);
 +
-+	for (size_t ci = 0; ci < candidates.size(); ci++) {
-+		Entity* candidate = candidates[ci];
++	// Tries one candidate against every priority + ready cure. Returns a
++	// spell to cast, or nullptr if nothing applies. Caller is responsible
++	// for keeping the candidate Entity* alive across this call (e.g. by
++	// holding the group readlock for non-self/non-owner targets).
++	auto try_candidate = [&](Entity* candidate) -> Spell* {
 +		if (!candidate || !candidate->Alive())
-+			continue;
++			return nullptr;
 +		const int32 cand_id = candidate->GetID();
 +		for (size_t pi = 0; pi < priority_count; pi++) {
 +			int8 dt = det_priority[pi];
 +			std::pair<int32, int8> key(cand_id, dt);
 +			if (!candidate->HasCurableDetrimentType(dt)) {
 +				// Det cleared (by us, by someone else, or expired) — forget
-+				// any prior attempt count so we'll retry fresh next time
-+				// it shows up.
++				// any prior attempt count so we'll retry fresh next time.
 +				m_cureAttempts.erase(key);
 +				continue;
 +			}
 +			auto attempt_itr = m_cureAttempts.find(key);
 +			if (attempt_itr != m_cureAttempts.end() &&
 +			    attempt_itr->second >= MAX_CURE_ATTEMPTS) {
-+				// Tried this combo MAX_CURE_ATTEMPTS times and the det's
-+				// still up — give up so the bot stops thrashing. Will reset
-+				// when HasCurableDetrimentType eventually returns false.
++				// Tried this combo MAX_CURE_ATTEMPTS times and the det's still
++				// up — give up so the bot stops thrashing. Will reset when
++				// HasCurableDetrimentType eventually returns false.
 +				continue;
 +			}
 +			// Two-pass match: prefer a cure whose det_type matches the
 +			// detriment exactly; fall back to a generic cure (det_type=0,
 +			// "Cure" / "Brood Cure" — dispels any) if no specific cure is
-+			// ready. Generic cures are usually higher reuse so we'd rather
-+			// burn the targeted one when it's available.
++			// ready.
 +			Spell* generic = nullptr;
-+			map<int32, int8>::iterator itr;
-+			for (itr = cure_spells.begin(); itr != cure_spells.end(); itr++) {
-+				Spell* s = master_spell_list.GetSpell(itr->first, itr->second);
-+				if (!s || !IsSpellReady(s))
++			for (auto sp_itr = cure_spells.begin(); sp_itr != cure_spells.end(); ++sp_itr) {
++				Spell* sp = master_spell_list.GetSpell(sp_itr->first, sp_itr->second);
++				if (!sp || !IsSpellReady(sp))
 +					continue;
-+				int8 sdt = s->GetSpellData()->det_type;
++				int8 sdt = sp->GetSpellData()->det_type;
 +				if (sdt == dt) {
 +					m_cureAttempts[key] = (int8)(m_cureAttempts[key] + 1);
 +					SetTarget(candidate);
-+					return s;
++					return sp;
 +				}
 +				if (sdt == 0 && !generic)
-+					generic = s;
++					generic = sp;
 +			}
 +			if (generic) {
 +				m_cureAttempts[key] = (int8)(m_cureAttempts[key] + 1);
 +				SetTarget(candidate);
 +				return generic;
 +			}
++		}
++		return nullptr;
++	};
++
++	// Self first — a stunned/silenced bot can't cast on others anyway.
++	if (Spell* s = try_candidate(this))
++		return s;
++
++	// Owner second — outside the group lock since owner ownership is
++	// stable across this call (player can't silently dematerialize).
++	Entity* owner = (GetOwner() && GetOwner()->IsEntity() && GetOwner() != this)
++		? (Entity*)GetOwner() : nullptr;
++	if (owner) {
++		if (Spell* s = try_candidate(owner))
++			return s;
++	}
++
++	// Group members — held under readlock the entire time we touch
++	// their Entity*. Releasing the lock and then dereferencing was the
++	// TOCTOU bug that caused the heap corruption crashes.
++	GroupMemberInfo* gmi = GetGroupMemberInfo();
++	if (gmi) {
++		PlayerGroup* group = world.GetGroupManager()->GetGroup(gmi->group_id);
++		if (group) {
++			Spell* result = nullptr;
++			group->MGroupMembers.readlock(__FUNCTION__, __LINE__);
++			deque<GroupMemberInfo*>* members = group->GetMembers();
++			for (size_t i = 0; i < members->size() && !result; i++) {
++				Entity* m = members->at(i)->member;
++				if (!m || m == this || m == owner)
++					continue;
++				result = try_candidate(m);
++			}
++			group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
++			if (result)
++				return result;
 +		}
 +	}
  	return 0;
