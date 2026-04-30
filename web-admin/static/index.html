@@ -278,7 +278,7 @@ iframe.catalog { width:100%; height:100%; border:0; border-radius:var(--radius-s
             <input type="checkbox" id="rg-force"> Force (skip offline check)
           </label>
           <button class="btn" onclick="runForm('race-gender', true)">Preview</button>
-          <button class="btn primary" id="rg-apply" disabled onclick="runForm('race-gender', false)">Apply</button>
+          <button class="btn primary" id="rg-apply" onclick="runForm('race-gender', false)">Apply</button>
         </div>
         <pre id="rg-output" class="output"></pre>
       </div>
@@ -307,7 +307,7 @@ iframe.catalog { width:100%; height:100%; border:0; border-radius:var(--radius-s
             <input type="checkbox" id="r-force"> Force (skip offline check)
           </label>
           <button class="btn" onclick="runForm('give-resources', true)">Preview</button>
-          <button class="btn primary" id="r-apply" disabled onclick="runForm('give-resources', false)">Apply</button>
+          <button class="btn primary" id="r-apply" onclick="runForm('give-resources', false)">Apply</button>
         </div>
         <pre id="r-output" class="output"></pre>
       </div>
@@ -321,7 +321,7 @@ iframe.catalog { width:100%; height:100%; border:0; border-radius:var(--radius-s
             <input type="checkbox" id="g-force"> Force (skip offline check)
           </label>
           <button class="btn" onclick="runForm('gear-up', true)">Preview</button>
-          <button class="btn primary" id="g-apply" disabled onclick="runForm('gear-up', false)">Apply</button>
+          <button class="btn primary" id="g-apply" onclick="runForm('gear-up', false)">Apply</button>
         </div>
         <pre id="g-output" class="output"></pre>
       </div>
@@ -359,7 +359,7 @@ iframe.catalog { width:100%; height:100%; border:0; border-radius:var(--radius-s
             <input type="checkbox" id="b-force"> Force (skip offline check)
           </label>
           <button class="btn" onclick="runForm('spawn-bank-items', true)">Preview</button>
-          <button class="btn primary" id="b-apply" disabled onclick="runForm('spawn-bank-items', false)">Apply</button>
+          <button class="btn primary" id="b-apply" onclick="runForm('spawn-bank-items', false)">Apply</button>
         </div>
         <pre id="b-output" class="output"></pre>
       </div>
@@ -393,7 +393,6 @@ iframe.catalog { width:100%; height:100%; border:0; border-radius:var(--radius-s
 let selectedChar = null;       // {id, name, ...} once a character is picked
 let logsTimer = null;
 let statusTimer = null;
-let lastPreview = {};          // formId -> bool, gates Apply buttons
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -555,11 +554,8 @@ async function selectChar(name) {
     renderCharInfo(d);
     document.getElementById('char-info-card').style.display = '';
     document.getElementById('char-forms').style.display = '';
-    // Reset Apply gates whenever a new character is loaded.
-    lastPreview = {};
+    // Clear stale output panes when a new character is loaded.
     ['rg','r','g','b'].forEach(k => {
-      const apply = document.getElementById(k + '-apply');
-      if (apply) apply.disabled = true;
       const out = document.getElementById(k + '-output');
       if (out) { out.textContent = ''; out.className = 'output'; }
     });
@@ -592,10 +588,10 @@ function renderCharInfo(d) {
 // ---------------------------------------------------------------------------
 async function runForm(kind, dryRun) {
   if (!selectedChar) { alert('Pick a character first.'); return; }
-  let outId, applyId, body, endpoint;
+  let outId, body, endpoint;
   switch (kind) {
     case 'race-gender': {
-      outId = 'rg-output'; applyId = 'rg-apply';
+      outId = 'rg-output';
       body = {
         race: document.getElementById('rg-race').value,
         gender: document.getElementById('rg-gender').value,
@@ -606,7 +602,7 @@ async function runForm(kind, dryRun) {
       break;
     }
     case 'give-resources': {
-      outId = 'r-output'; applyId = 'r-apply';
+      outId = 'r-output';
       body = {
         plat: numOrNull('r-plat'),
         gold: numOrNull('r-gold'),
@@ -621,7 +617,7 @@ async function runForm(kind, dryRun) {
       break;
     }
     case 'gear-up': {
-      outId = 'g-output'; applyId = 'g-apply';
+      outId = 'g-output';
       body = {
         force: document.getElementById('g-force').checked,
         dry_run: dryRun,
@@ -630,13 +626,13 @@ async function runForm(kind, dryRun) {
       break;
     }
     case 'apply-template': {
-      outId = 't-output'; applyId = null;  // no preview path
+      outId = 't-output';
       body = { no_admin: document.getElementById('t-no-admin').checked };
       endpoint = `/api/characters/${encodeURIComponent(selectedChar.name)}/apply-template`;
       break;
     }
     case 'spawn-bank-items': {
-      outId = 'b-output'; applyId = 'b-apply';
+      outId = 'b-output';
       // The script reads `character:` from the YAML; we stitch it onto
       // whatever the user pasted (overriding any value already there).
       const userYaml = document.getElementById('b-yaml').value.trim();
@@ -663,14 +659,10 @@ async function runForm(kind, dryRun) {
     });
     const d = await r.json();
     showCommandResult(out, d);
-    if (applyId && dryRun && d.ok) {
-      document.getElementById(applyId).disabled = false;
-    }
-    if (applyId && !dryRun) {
+    if (!dryRun && d.ok && selectedChar) {
       // After a real apply, reload the character info so the displayed
       // state matches what was just written.
-      document.getElementById(applyId).disabled = true;
-      if (selectedChar) selectChar(selectedChar.name);
+      selectChar(selectedChar.name);
     }
   } catch (e) {
     out.className = 'output error';

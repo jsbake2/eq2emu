@@ -156,7 +156,12 @@ async def auth_middleware(request: Request, call_next):
 # ---------------------------------------------------------------------------
 @app.get("/")
 async def index():
-    return FileResponse(STATIC / "index.html")
+    # no-store so the dashboard HTML always reflects the deployed
+    # version — without it browsers may serve a stale copy after edits.
+    return FileResponse(
+        STATIC / "index.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
 
 
 @app.get("/login")
