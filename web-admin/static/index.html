@@ -544,7 +544,12 @@ async function _doSearchChars() {
   }
 }
 
-async function selectChar(name) {
+async function selectChar(name, opts = {}) {
+  // opts.preserveOutput=true means we're refreshing stats after a
+  // successful Apply — keep the form output panes visible so the
+  // operator sees the "✓ updated" confirmation. Without this guard,
+  // post-apply refresh wipes the output a few ms after rendering it
+  // (looks like a flash → "nothing happened").
   document.querySelectorAll('.char-result').forEach(r => r.classList.toggle('selected', r.dataset.name === name));
   try {
     const r = await fetch('/api/characters/' + encodeURIComponent(name) + '/info');
@@ -554,13 +559,14 @@ async function selectChar(name) {
     renderCharInfo(d);
     document.getElementById('char-info-card').style.display = '';
     document.getElementById('char-forms').style.display = '';
-    // Clear stale output panes when a new character is loaded.
-    ['rg','r','g','b'].forEach(k => {
-      const out = document.getElementById(k + '-output');
-      if (out) { out.textContent = ''; out.className = 'output'; }
-    });
-    document.getElementById('t-output').textContent = '';
-    document.getElementById('t-output').className = 'output';
+    if (!opts.preserveOutput) {
+      ['rg','r','g','b'].forEach(k => {
+        const out = document.getElementById(k + '-output');
+        if (out) { out.textContent = ''; out.className = 'output'; }
+      });
+      document.getElementById('t-output').textContent = '';
+      document.getElementById('t-output').className = 'output';
+    }
   } catch (e) {
     alert('Could not load character: ' + e.message);
   }
@@ -660,9 +666,9 @@ async function runForm(kind, dryRun) {
     const d = await r.json();
     showCommandResult(out, d);
     if (!dryRun && d.ok && selectedChar) {
-      // After a real apply, reload the character info so the displayed
-      // state matches what was just written.
-      selectChar(selectedChar.name);
+      // After a real apply, refresh the displayed stats but keep the
+      // success message visible — see selectChar opts.preserveOutput.
+      selectChar(selectedChar.name, { preserveOutput: true });
     }
   } catch (e) {
     out.className = 'output error';
