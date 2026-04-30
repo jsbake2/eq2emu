@@ -567,13 +567,15 @@ button:hover { background:rgba(96,165,250,0.2); }
   <div class="logo">EQ2</div>
   <h1>EQ2Emu Admin</h1>
   <div class="sub">Enter the dashboard password to continue</div>
-  <form id="login-form" onsubmit="login(); return false;" autocomplete="off">
-    <input type="text" name="username" value="admin" autocomplete="username"
-           style="display:none" tabindex="-1" aria-hidden="true">
-    <label>Password</label>
-    <input type="password" id="pw" name="password" autocomplete="current-password" autofocus>
-    <button type="submit">Sign In</button>
-  </form>
+  <label>Password</label>
+  <!-- No <form>, no name="password", no autocomplete="current-password".
+       Those three things together are what trigger the browser's
+       saved-password manager UI ("which username should I save this
+       under?"). Plain input + button + Enter handler skips all of it. -->
+  <input type="password" id="pw" autocomplete="off"
+         data-lpignore="true" data-1p-ignore="true" data-bwignore="true"
+         autofocus>
+  <button id="signin-btn" type="button">Sign In</button>
   <div class="err" id="err">Wrong password</div>
 </div>
 <script>
@@ -586,6 +588,10 @@ async function login() {
   if (r.ok) { window.location.href = '/'; }
   else { document.getElementById('err').style.display = 'block'; }
 }
+document.getElementById('signin-btn').addEventListener('click', login);
+document.getElementById('pw').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); login(); }
+});
 </script>
 </body>
 </html>
