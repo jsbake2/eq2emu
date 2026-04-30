@@ -161,7 +161,11 @@ async def index():
 
 @app.get("/login")
 async def login_page():
-    return HTMLResponse(LOGIN_HTML)
+    # no-store so browsers don't serve a cached copy of an older login UI.
+    return HTMLResponse(
+        LOGIN_HTML,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
 
 
 @app.post("/api/login")
@@ -536,62 +540,76 @@ LOGIN_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>EQ2Emu Admin — Login</title>
+<title>EQ2Emu Admin - Login</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:'Inter',sans-serif; background:#0a0a0f; color:#e8e8f0;
-       min-height:100vh; display:flex; align-items:center; justify-content:center; }
-.card { background:#16161f; border:1px solid #2a2a3a; border-radius:12px;
-        padding:40px; width:380px; box-shadow:0 4px 24px rgba(0,0,0,0.4); }
-.logo { width:48px; height:48px; background:rgba(96,165,250,0.12); border-radius:10px;
-        display:flex; align-items:center; justify-content:center; font-size:22px;
-        font-weight:700; color:#60a5fa; margin:0 auto 20px; }
-h1 { text-align:center; font-size:20px; margin-bottom:6px; }
-.sub { text-align:center; font-size:13px; color:#8888a0; margin-bottom:28px; }
-label { font-size:12px; font-weight:500; color:#8888a0; text-transform:uppercase;
-        letter-spacing:.6px; }
-input { width:100%; padding:12px 14px; margin:8px 0 20px; border-radius:8px;
-        border:1px solid #2a2a3a; background:#1a1a26; color:#e8e8f0;
-        font-family:'Inter',sans-serif; font-size:14px; outline:none; }
-input:focus { border-color:#60a5fa; }
-button { width:100%; padding:12px; border-radius:8px; border:1px solid #60a5fa;
-         background:rgba(96,165,250,0.12); color:#60a5fa; font-family:'Inter',sans-serif;
-         font-size:14px; font-weight:600; cursor:pointer; transition:.15s; }
-button:hover { background:rgba(96,165,250,0.2); }
-.err { color:#f87171; font-size:13px; text-align:center; margin-top:12px; display:none; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: #0a0a0f;
+  color: #e8e8f0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.login-card {
+  background: #16161f;
+  border: 1px solid #2a2a3a;
+  border-radius: 12px;
+  padding: 40px;
+  width: 380px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+.logo {
+  width: 48px; height: 48px;
+  background: rgba(96,165,250,0.12);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 700; color: #60a5fa;
+  letter-spacing: -0.5px;
+  margin: 0 auto 20px;
+}
+h1 { text-align: center; font-size: 20px; margin-bottom: 6px; }
+.sub { text-align: center; font-size: 13px; color: #8888a0; margin-bottom: 28px; }
+label { font-size: 12px; font-weight: 500; color: #8888a0; text-transform: uppercase; letter-spacing: 0.6px; }
+input {
+  width: 100%; padding: 12px 14px; margin: 8px 0 20px;
+  border-radius: 8px; border: 1px solid #2a2a3a;
+  background: #1a1a26; color: #e8e8f0;
+  font-family: 'Inter', sans-serif; font-size: 14px; outline: none;
+}
+input:focus { border-color: #60a5fa; }
+button {
+  width: 100%; padding: 12px;
+  border-radius: 8px; border: 1px solid #60a5fa;
+  background: rgba(96,165,250,0.12); color: #60a5fa;
+  font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+}
+button:hover { background: rgba(96,165,250,0.2); }
+.error { color: #f87171; font-size: 13px; text-align: center; margin-top: 12px; display: none; }
 </style>
 </head>
 <body>
-<div class="card">
+<div class="login-card">
   <div class="logo">EQ2</div>
   <h1>EQ2Emu Admin</h1>
   <div class="sub">Enter the dashboard password to continue</div>
   <label>Password</label>
-  <!-- No <form>, no name="password", no autocomplete="current-password".
-       Those three things together are what trigger the browser's
-       saved-password manager UI ("which username should I save this
-       under?"). Plain input + button + Enter handler skips all of it. -->
-  <input type="password" id="pw" autocomplete="off"
-         data-lpignore="true" data-1p-ignore="true" data-bwignore="true"
-         autofocus>
-  <button id="signin-btn" type="button">Sign In</button>
-  <div class="err" id="err">Wrong password</div>
+  <input type="password" id="pw" placeholder="Dashboard password" onkeydown="if(event.key==='Enter')login()">
+  <button onclick="login()">Sign In</button>
+  <div class="error" id="err">Incorrect password</div>
 </div>
 <script>
 async function login() {
   const pw = document.getElementById('pw').value;
-  const r = await fetch('/api/login', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({password: pw})
-  });
-  if (r.ok) { window.location.href = '/'; }
+  const r = await fetch('/api/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pw}) });
+  if (r.ok) {
+    window.location.href = '/';
+  }
   else { document.getElementById('err').style.display = 'block'; }
 }
-document.getElementById('signin-btn').addEventListener('click', login);
-document.getElementById('pw').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); login(); }
-});
 </script>
 </body>
 </html>
