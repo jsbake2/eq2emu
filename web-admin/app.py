@@ -567,10 +567,13 @@ button:hover { background:rgba(96,165,250,0.2); }
   <div class="logo">EQ2</div>
   <h1>EQ2Emu Admin</h1>
   <div class="sub">Enter the dashboard password to continue</div>
-  <label>Password</label>
-  <input type="password" id="pw" autofocus
-         onkeydown="if(event.key==='Enter')login()">
-  <button onclick="login()">Sign In</button>
+  <form id="login-form" onsubmit="login(); return false;" autocomplete="off">
+    <input type="text" name="username" value="admin" autocomplete="username"
+           style="display:none" tabindex="-1" aria-hidden="true">
+    <label>Password</label>
+    <input type="password" id="pw" name="password" autocomplete="current-password" autofocus>
+    <button type="submit">Sign In</button>
+  </form>
   <div class="err" id="err">Wrong password</div>
 </div>
 <script>
