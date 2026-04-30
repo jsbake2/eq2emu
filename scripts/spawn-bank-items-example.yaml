@@ -1,0 +1,25 @@
+# Example spec for scripts/spawn-bank-items.py
+#
+# Run with:
+#     ./scripts/spawn-bank-items.py scripts/spawn-bank-items-example.yaml --dry-run
+# then drop --dry-run to actually apply.
+#
+# Bank slots are 1-indexed (matches in-game UI). Each must already contain
+# a Bag-type item — the script places the listed entries into that bag at
+# inner slots 0..N (in YAML order).
+#
+# 'item' can be an integer item_id OR a string item name. Names must be
+# unique in the items table; if ambiguous, the script errors with the
+# matching ids so you can use the id you want.
+
+character: Default
+
+bank:
+  1:
+    - {item: 35993, count: 20}            # delectable manticore pie (food, L50, 5h)
+    - {item: 36545, count: 20}            # Nagafen's Flame (drink, L50, 5h)
+    - {item: "Nagafen's Flame", count: 20}  # name lookup form
+
+  2:
+    - {item: 152754}                      # Footman Boots (count defaults to 1)
+    - {item: 88905}                       # Templar's Morningstar
