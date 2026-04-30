@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EQ2Emu Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-card: #16161f;
+  --bg-card-hover: #1c1c28;
+  --bg-input: #1a1a26;
+  --border: #2a2a3a;
+  --border-hover: #3a3a4f;
+  --text: #e8e8f0;
+  --text-2: #8888a0;
+  --text-3: #55556a;
+  --accent: #60a5fa;
+  --accent-dim: rgba(96,165,250,0.12);
+  --green: #34d399;
+  --green-dim: rgba(52,211,153,0.12);
+  --red: #f87171;
+  --red-dim: rgba(248,113,113,0.12);
+  --yellow: #f5a623;
+  --yellow-dim: rgba(245,166,35,0.12);
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg-primary);
+       color:var(--text); min-height:100vh; }
+code, .mono { font-family:'JetBrains Mono', ui-monospace, monospace; font-size:.85em; }
+
+/* ---- Header ---- */
+.header { display:flex; align-items:center; justify-content:space-between;
+          padding:14px 28px; background:var(--bg-secondary);
+          border-bottom:1px solid var(--border); position:sticky; top:0; z-index:100; }
+.header-left { display:flex; align-items:center; gap:14px; }
+.logo { width:36px; height:36px; background:var(--accent-dim); border-radius:var(--radius-sm);
+        display:flex; align-items:center; justify-content:center; font-size:14px;
+        font-weight:700; color:var(--accent); letter-spacing:-0.5px; }
+.header h1 { font-size:17px; font-weight:600; letter-spacing:-0.3px; }
+.header h1 span { color:var(--text-2); font-weight:400; }
+.badge { display:flex; align-items:center; gap:8px; padding:6px 14px; border-radius:20px;
+         font-size:11px; font-weight:500; letter-spacing:.4px; text-transform:uppercase; }
+.badge.connected { background:var(--green-dim); color:var(--green); }
+.badge.degraded { background:var(--yellow-dim); color:var(--yellow); }
+.badge.disconnected { background:var(--red-dim); color:var(--red); }
+.badge .dot { width:7px; height:7px; border-radius:50%; background:currentColor;
+              animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+.header-right { display:flex; align-items:center; gap:12px; }
+.icon-btn { background:transparent; color:var(--text-2); border:1px solid var(--border);
+            border-radius:6px; padding:6px 12px; font-size:12px; cursor:pointer;
+            font-family:inherit; }
+.icon-btn:hover { color:var(--text); border-color:var(--accent); }
+
+/* ---- Tabs ---- */
+.tab-bar { display:flex; gap:0; padding:0 28px; background:var(--bg-secondary);
+           border-bottom:1px solid var(--border); }
+.tab-btn { padding:10px 20px; font-family:'Inter',sans-serif; font-size:13px;
+           font-weight:500; color:var(--text-2); background:none; border:none;
+           border-bottom:2px solid transparent; cursor:pointer; transition:.15s; }
+.tab-btn:hover { color:var(--text); }
+.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+.tab-panel { display:none; padding:24px 28px; max-width:1400px; margin:0 auto; }
+.tab-panel.active { display:block; }
+
+/* ---- Cards / sections ---- */
+.card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius);
+        padding:18px 20px; margin-bottom:18px; }
+.card h2 { font-size:14px; font-weight:600; color:var(--text); margin-bottom:12px;
+           text-transform:uppercase; letter-spacing:.4px; }
+.card .sub { font-size:12px; color:var(--text-2); margin-bottom:12px; }
+.row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+.col { flex:1; min-width:200px; }
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+@media(max-width: 900px) { .grid-2 { grid-template-columns:1fr; } }
+
+/* ---- Inputs ---- */
+input[type=text], input[type=number], input[type=password], select, textarea {
+  width:100%; padding:8px 10px; border-radius:6px; border:1px solid var(--border);
+  background:var(--bg-input); color:var(--text); font-family:'Inter',sans-serif;
+  font-size:13px; outline:none;
+}
+input:focus, select:focus, textarea:focus { border-color:var(--accent); }
+textarea { font-family:'JetBrains Mono',monospace; font-size:12px; min-height:120px;
+           resize:vertical; }
+label { display:block; font-size:11px; font-weight:500; color:var(--text-2);
+        text-transform:uppercase; letter-spacing:.4px; margin-bottom:4px; }
+.field { margin-bottom:12px; }
+
+/* ---- Buttons ---- */
+button.btn { padding:8px 14px; border-radius:6px; border:1px solid var(--border);
+             background:var(--bg-input); color:var(--text); font-family:inherit;
+             font-size:13px; font-weight:500; cursor:pointer; transition:.15s; }
+button.btn:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+button.btn:disabled { opacity:.4; cursor:not-allowed; }
+button.btn.primary { border-color:var(--accent); color:var(--accent); background:var(--accent-dim); }
+button.btn.primary:hover:not(:disabled) { background:rgba(96,165,250,0.2); }
+button.btn.danger { border-color:var(--red); color:var(--red); background:var(--red-dim); }
+button.btn.danger:hover:not(:disabled) { background:rgba(248,113,113,0.2); }
+button.btn.warn { border-color:var(--yellow); color:var(--yellow); background:var(--yellow-dim); }
+button.btn.warn:hover:not(:disabled) { background:rgba(245,166,35,0.2); }
+
+/* ---- Container chips (server tab) ---- */
+.containers { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+.cont { padding:12px 14px; background:var(--bg-input); border:1px solid var(--border);
+        border-radius:var(--radius-sm); }
+.cont .name { font-weight:600; font-size:13px; }
+.cont .state { font-size:11px; text-transform:uppercase; letter-spacing:.4px;
+               margin-top:4px; }
+.cont.up .state { color:var(--green); }
+.cont.down .state { color:var(--red); }
+.cont .img { font-size:11px; color:var(--text-3); margin-top:6px; word-break:break-all; }
+
+/* ---- Output / log panes ---- */
+.output { font-family:'JetBrains Mono',monospace; font-size:12px;
+          background:#08080c; color:var(--text); padding:12px;
+          border-radius:6px; border:1px solid var(--border);
+          max-height:400px; overflow:auto; white-space:pre-wrap;
+          word-break:break-word; margin-top:10px; }
+.output:empty::before { content:'(no output yet)'; color:var(--text-3); font-style:italic; }
+.output.error { border-color:var(--red); }
+.output.success { border-color:var(--green); }
+.log-pane { font-family:'JetBrains Mono',monospace; font-size:11.5px;
+            background:#08080c; color:#cfcfdf; padding:12px;
+            border-radius:6px; border:1px solid var(--border);
+            height:480px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
+
+/* ---- Character search ---- */
+.char-results { display:grid; gap:6px; max-height:320px; overflow:auto;
+                margin-top:8px; }
+.char-result { display:grid; grid-template-columns: 1fr auto auto auto;
+               gap:12px; padding:8px 12px; background:var(--bg-input);
+               border:1px solid var(--border); border-radius:6px;
+               cursor:pointer; align-items:center; }
+.char-result:hover { background:var(--bg-card-hover); border-color:var(--accent); }
+.char-result.selected { border-color:var(--accent); background:var(--accent-dim); }
+.char-result .name { font-weight:500; font-size:13px; }
+.char-result .meta { font-size:11px; color:var(--text-2); }
+.char-info { padding:10px 12px; background:var(--bg-input); border:1px solid var(--border);
+             border-radius:6px; margin-top:10px; font-size:12.5px; line-height:1.6; }
+.char-info strong { color:var(--text-2); font-weight:500; }
+.subform { margin-top:14px; padding-top:14px; border-top:1px dashed var(--border); }
+.subform h3 { font-size:12px; font-weight:600; color:var(--accent); margin-bottom:8px;
+              text-transform:uppercase; letter-spacing:.4px; }
+.faction-rows { display:grid; gap:6px; }
+.faction-row { display:grid; grid-template-columns: 1fr 100px auto; gap:8px; }
+.faction-row button { padding:6px 10px; }
+
+/* ---- Items tab ---- */
+.iframe-wrap { width:100%; height:calc(100vh - 220px); min-height:600px;
+               border:1px solid var(--border); border-radius:var(--radius-sm);
+               background:var(--bg-card); }
+iframe.catalog { width:100%; height:100%; border:0; border-radius:var(--radius-sm); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo">EQ2</div>
+    <h1>EQ2Emu Admin <span>· bakerworld</span></h1>
+  </div>
+  <div class="header-right">
+    <div id="status-badge" class="badge disconnected">
+      <span class="dot"></span><span id="status-text">Connecting</span>
+    </div>
+    <button class="icon-btn" onclick="logout()">Sign out</button>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="server" onclick="showTab('server')">Server</button>
+  <button class="tab-btn" data-tab="characters" onclick="showTab('characters')">Characters</button>
+  <button class="tab-btn" data-tab="items" onclick="showTab('items')">Items</button>
+</div>
+
+<!-- =============================================================== -->
+<!-- SERVER TAB                                                       -->
+<!-- =============================================================== -->
+<section id="tab-server" class="tab-panel active">
+  <div class="grid-2">
+    <div class="card">
+      <h2>Containers</h2>
+      <div class="sub">Live status from <code>docker compose ps</code> (refreshed every 5s).</div>
+      <div id="containers" class="containers"></div>
+      <div class="row" style="margin-top:14px;">
+        <button class="btn primary" onclick="serverAction('start')">Start</button>
+        <button class="btn danger" onclick="serverAction('stop')">Stop</button>
+        <button class="btn warn" onclick="serverAction('restart')">Restart</button>
+        <button class="btn" onclick="loadServerStatus(true)">Refresh</button>
+      </div>
+      <pre id="server-output" class="output"></pre>
+    </div>
+    <div class="card">
+      <h2>Server Logs</h2>
+      <div class="sub">Tail of <code>docker logs docker-eq2emu-server-1</code>. Last 200 lines.</div>
+      <div class="row" style="margin-bottom:8px;">
+        <button class="btn" onclick="loadServerLogs()">Refresh</button>
+        <label style="margin:0;display:inline-flex;gap:6px;align-items:center;color:var(--text-2);font-size:12px;text-transform:none;letter-spacing:0;">
+          <input type="checkbox" id="logs-auto" checked> Auto-refresh (5s)
+        </label>
+      </div>
+      <pre id="server-logs" class="log-pane"></pre>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================================== -->
+<!-- CHARACTERS TAB                                                   -->
+<!-- =============================================================== -->
+<section id="tab-characters" class="tab-panel">
+  <div class="grid-2">
+    <div>
+      <div class="card">
+        <h2>Find character</h2>
+        <div class="field">
+          <input type="text" id="char-search" placeholder="Type a name (substring match)…"
+                 oninput="searchChars()" autocomplete="off" spellcheck="false">
+        </div>
+        <div id="char-results" class="char-results"></div>
+      </div>
+      <div class="card" id="char-info-card" style="display:none;">
+        <h2>Selected</h2>
+        <div id="char-info" class="char-info"></div>
+      </div>
+    </div>
+    <div id="char-forms" style="display:none;">
+
+      <!-- Race / Gender -->
+      <div class="card">
+        <h2>Race / Gender</h2>
+        <div class="sub">Character must be offline. Updates <code>characters.race</code> and <code>characters.gender</code>.</div>
+        <div class="row">
+          <div class="col">
+            <label>Race</label>
+            <select id="rg-race">
+              <option value="">— no change —</option>
+              <option value="0">Barbarian</option>
+              <option value="1">Dark Elf</option>
+              <option value="2">Dwarf</option>
+              <option value="3">Erudite</option>
+              <option value="4">Froglok</option>
+              <option value="5">Gnome</option>
+              <option value="6">Half Elf</option>
+              <option value="7">Halfling</option>
+              <option value="8">High Elf</option>
+              <option value="9">Human</option>
+              <option value="10">Iksar</option>
+              <option value="11">Kerra</option>
+              <option value="12">Ogre</option>
+              <option value="13">Ratonga</option>
+              <option value="14">Troll</option>
+              <option value="15">Wood Elf</option>
+              <option value="16">Fae</option>
+              <option value="17">Arasai</option>
+              <option value="18">Sarnak</option>
+              <option value="19">Vampire</option>
+              <option value="20">Aerakyn</option>
+            </select>
+          </div>
+          <div class="col">
+            <label>Gender</label>
+            <select id="rg-gender">
+              <option value="">— no change —</option>
+              <option value="M">Male</option>
+              <option value="F">Female</option>
+            </select>
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <label style="margin:0;display:inline-flex;gap:6px;align-items:center;color:var(--text-2);font-size:12px;text-transform:none;letter-spacing:0;">
+            <input type="checkbox" id="rg-force"> Force (skip offline check)
+          </label>
+          <button class="btn" onclick="runForm('race-gender', true)">Preview</button>
+          <button class="btn primary" id="rg-apply" disabled onclick="runForm('race-gender', false)">Apply</button>
+        </div>
+        <pre id="rg-output" class="output"></pre>
+      </div>
+
+      <!-- Resources -->
+      <div class="card">
+        <h2>Coin / Status / Faction</h2>
+        <div class="sub">All values are <em>added</em> (not set). Coin overflow normalizes copper → silver → gold → plat.</div>
+        <div class="row">
+          <div class="col"><label>Plat</label><input type="number" id="r-plat" placeholder="0"></div>
+          <div class="col"><label>Gold</label><input type="number" id="r-gold" placeholder="0"></div>
+          <div class="col"><label>Silver</label><input type="number" id="r-silver" placeholder="0"></div>
+          <div class="col"><label>Copper</label><input type="number" id="r-copper" placeholder="0"></div>
+        </div>
+        <div class="row">
+          <div class="col"><label>Status points</label><input type="number" id="r-status" placeholder="0"></div>
+        </div>
+        <div class="subform">
+          <h3>Faction adjustments</h3>
+          <div class="sub">Substring match on faction name. Positive raises, negative lowers.</div>
+          <div id="faction-rows" class="faction-rows"></div>
+          <button class="btn" style="margin-top:6px;" onclick="addFactionRow()">+ Add faction</button>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <label style="margin:0;display:inline-flex;gap:6px;align-items:center;color:var(--text-2);font-size:12px;text-transform:none;letter-spacing:0;">
+            <input type="checkbox" id="r-force"> Force (skip offline check)
+          </label>
+          <button class="btn" onclick="runForm('give-resources', true)">Preview</button>
+          <button class="btn primary" id="r-apply" disabled onclick="runForm('give-resources', false)">Apply</button>
+        </div>
+        <pre id="r-output" class="output"></pre>
+      </div>
+
+      <!-- Gear-up -->
+      <div class="card">
+        <h2>Gear up (mastercrafted)</h2>
+        <div class="sub">Picks class-appropriate mastercrafted gear at the character's current level. Wraps <code>scripts/gear-up.py</code>.</div>
+        <div class="row">
+          <label style="margin:0;display:inline-flex;gap:6px;align-items:center;color:var(--text-2);font-size:12px;text-transform:none;letter-spacing:0;">
+            <input type="checkbox" id="g-force"> Force (skip offline check)
+          </label>
+          <button class="btn" onclick="runForm('gear-up', true)">Preview</button>
+          <button class="btn primary" id="g-apply" disabled onclick="runForm('gear-up', false)">Apply</button>
+        </div>
+        <pre id="g-output" class="output"></pre>
+      </div>
+
+      <!-- Character template -->
+      <div class="card">
+        <h2>Apply character template</h2>
+        <div class="sub">Loads canonical macros, skillbar, keymap, and UI window layout from <code>templates/character/default/</code>. By default also grants admin_status=200.</div>
+        <div class="row">
+          <label style="margin:0;display:inline-flex;gap:6px;align-items:center;color:var(--text-2);font-size:12px;text-transform:none;letter-spacing:0;">
+            <input type="checkbox" id="t-no-admin"> Don't grant admin (keep as normal player)
+          </label>
+          <button class="btn primary" onclick="runForm('apply-template', false)">Apply now</button>
+        </div>
+        <pre id="t-output" class="output"></pre>
+      </div>
+
+      <!-- Bank items -->
+      <div class="card">
+        <h2>Spawn bank items</h2>
+        <div class="sub">Paste a YAML spec describing what to drop into the character's bank bags. <code>character:</code> in the YAML is overridden by the selected character.</div>
+        <div class="field">
+          <textarea id="b-yaml" placeholder='bank:
+  1:
+    - {item: 35993, count: 20}
+    - {item: "Nagafen&apos;s Flame", count: 20}
+  2:
+    - {item: 152754}'></textarea>
+        </div>
+        <div class="row">
+          <label style="margin:0;display:inline-flex;gap:6px;align-items:center;color:var(--text-2);font-size:12px;text-transform:none;letter-spacing:0;">
+            <input type="checkbox" id="b-replace"> Replace (wipe existing bag contents)
+          </label>
+          <label style="margin:0;display:inline-flex;gap:6px;align-items:center;color:var(--text-2);font-size:12px;text-transform:none;letter-spacing:0;">
+            <input type="checkbox" id="b-force"> Force (skip offline check)
+          </label>
+          <button class="btn" onclick="runForm('spawn-bank-items', true)">Preview</button>
+          <button class="btn primary" id="b-apply" disabled onclick="runForm('spawn-bank-items', false)">Apply</button>
+        </div>
+        <pre id="b-output" class="output"></pre>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- =============================================================== -->
+<!-- ITEMS TAB                                                        -->
+<!-- =============================================================== -->
+<section id="tab-items" class="tab-panel">
+  <div class="card">
+    <h2>Item catalog</h2>
+    <div class="sub">Crafted + dropped catalog with rarity / slot / armor-type filters and click-to-copy commands. Set a "Give to" name in the embedded page to switch from <code>/summonitem</code> to <code>/giveitem</code>.</div>
+    <div class="row" style="margin-bottom:12px;">
+      <button class="btn" onclick="reloadCatalog()">Reload</button>
+      <button class="btn warn" onclick="regenCatalog()">Regenerate from DB</button>
+      <span id="catalog-status" style="font-size:12px;color:var(--text-2);"></span>
+    </div>
+    <div class="iframe-wrap">
+      <iframe id="catalog-frame" class="catalog" src="/api/catalog"></iframe>
+    </div>
+  </div>
+</section>
+
+<script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let selectedChar = null;       // {id, name, ...} once a character is picked
+let logsTimer = null;
+let statusTimer = null;
+let lastPreview = {};          // formId -> bool, gates Apply buttons
+
+// ---------------------------------------------------------------------------
+// Tabs
+// ---------------------------------------------------------------------------
+function showTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  if (name === 'server') startLogPolling();
+  else stopLogPolling();
+}
+
+async function logout() {
+  await fetch('/api/logout', { method: 'POST' });
+  window.location.href = '/login';
+}
+
+// ---------------------------------------------------------------------------
+// Server tab
+// ---------------------------------------------------------------------------
+async function loadServerStatus(force) {
+  try {
+    const r = await fetch('/api/server/status');
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    renderContainers(d.containers || []);
+    setStatusBadge(d.containers || []);
+  } catch (e) {
+    setStatusBadge(null);
+  }
+}
+
+function renderContainers(list) {
+  const el = document.getElementById('containers');
+  if (!list.length) {
+    el.innerHTML = '<div class="cont down"><div class="name">No containers</div><div class="state">Stack is down</div></div>';
+    return;
+  }
+  el.innerHTML = list.map(c => {
+    const up = (c.State || '').toLowerCase() === 'running';
+    return `<div class="cont ${up ? 'up' : 'down'}">
+      <div class="name">${escapeHtml(c.Service || c.Name || 'unknown')}</div>
+      <div class="state">${escapeHtml(c.State || 'unknown')}${c.Health ? ' · ' + escapeHtml(c.Health) : ''}</div>
+      <div class="img">${escapeHtml(c.Image || '')}</div>
+    </div>`;
+  }).join('');
+}
+
+function setStatusBadge(list) {
+  const badge = document.getElementById('status-badge');
+  const txt = document.getElementById('status-text');
+  if (list === null) {
+    badge.className = 'badge disconnected';
+    txt.textContent = 'Backend offline';
+    return;
+  }
+  if (!list.length) {
+    badge.className = 'badge disconnected';
+    txt.textContent = 'Stack down';
+    return;
+  }
+  const allUp = list.every(c => (c.State || '').toLowerCase() === 'running');
+  if (allUp) {
+    badge.className = 'badge connected';
+    txt.textContent = 'All running';
+  } else {
+    badge.className = 'badge degraded';
+    txt.textContent = 'Degraded';
+  }
+}
+
+async function serverAction(action) {
+  const out = document.getElementById('server-output');
+  out.className = 'output';
+  out.textContent = `Running ${action}…`;
+  try {
+    const r = await fetch('/api/server/' + action, { method: 'POST' });
+    const d = await r.json();
+    showCommandResult(out, d);
+  } catch (e) {
+    out.className = 'output error';
+    out.textContent = 'Error: ' + e.message;
+  }
+  loadServerStatus();
+}
+
+async function loadServerLogs() {
+  const el = document.getElementById('server-logs');
+  try {
+    const r = await fetch('/api/server/logs?n=200');
+    if (!r.ok) { el.textContent = `(error: HTTP ${r.status})`; return; }
+    const d = await r.json();
+    el.textContent = (d.lines || []).join('\n');
+    el.scrollTop = el.scrollHeight;
+  } catch (e) {
+    el.textContent = '(error: ' + e.message + ')';
+  }
+}
+
+function startLogPolling() {
+  stopLogPolling();
+  loadServerLogs();
+  logsTimer = setInterval(() => {
+    if (document.getElementById('logs-auto').checked) loadServerLogs();
+  }, 5000);
+}
+function stopLogPolling() {
+  if (logsTimer) { clearInterval(logsTimer); logsTimer = null; }
+}
+
+function showCommandResult(el, d) {
+  let body = '';
+  if (d.command) body += '$ ' + d.command + '\n\n';
+  if (d.stdout) body += d.stdout;
+  if (d.stderr) body += (body ? '\n--- stderr ---\n' : '') + d.stderr;
+  if (typeof d.returncode === 'number') body += `\n\n[exit ${d.returncode}]`;
+  el.textContent = body || '(no output)';
+  el.className = 'output ' + (d.ok ? 'success' : 'error');
+}
+
+// ---------------------------------------------------------------------------
+// Characters tab — search + selection
+// ---------------------------------------------------------------------------
+let searchTimer = null;
+function searchChars() {
+  if (searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(_doSearchChars, 250);
+}
+async function _doSearchChars() {
+  const q = document.getElementById('char-search').value.trim();
+  const el = document.getElementById('char-results');
+  if (!q) { el.innerHTML = ''; return; }
+  try {
+    const r = await fetch('/api/characters/search?q=' + encodeURIComponent(q));
+    const d = await r.json();
+    if (!d.rows || !d.rows.length) {
+      el.innerHTML = '<div class="char-result"><div class="name" style="color:var(--text-3)">No matches</div><span></span><span></span><span></span></div>';
+      return;
+    }
+    el.innerHTML = d.rows.map(c =>
+      `<div class="char-result" data-name="${escapeAttr(c.name)}" onclick="selectChar('${escapeAttr(c.name)}')">
+         <div><div class="name">${escapeHtml(c.name)}</div><div class="meta">${formatClass(c.adventure_class)} · ${formatRace(c.race)} · ${escapeHtml(c.gender == 0 ? 'M' : 'F')}</div></div>
+         <div class="meta">L${c.level || 0}</div>
+         <div class="meta">zone ${c.current_zone_id || '?'}</div>
+         <div class="meta">${c.admin_status > 0 ? 'GM' + c.admin_status : ''}</div>
+       </div>`
+    ).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="char-result"><div class="name" style="color:var(--red)">Error: ' + escapeHtml(e.message) + '</div><span></span><span></span><span></span></div>';
+  }
+}
+
+async function selectChar(name) {
+  document.querySelectorAll('.char-result').forEach(r => r.classList.toggle('selected', r.dataset.name === name));
+  try {
+    const r = await fetch('/api/characters/' + encodeURIComponent(name) + '/info');
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    selectedChar = d.character;
+    renderCharInfo(d);
+    document.getElementById('char-info-card').style.display = '';
+    document.getElementById('char-forms').style.display = '';
+    // Reset Apply gates whenever a new character is loaded.
+    lastPreview = {};
+    ['rg','r','g','b'].forEach(k => {
+      const apply = document.getElementById(k + '-apply');
+      if (apply) apply.disabled = true;
+      const out = document.getElementById(k + '-output');
+      if (out) { out.textContent = ''; out.className = 'output'; }
+    });
+    document.getElementById('t-output').textContent = '';
+    document.getElementById('t-output').className = 'output';
+  } catch (e) {
+    alert('Could not load character: ' + e.message);
+  }
+}
+
+function renderCharInfo(d) {
+  const c = d.character;
+  const lvl = c.level || 0, tslvl = c.tradeskill_level || 0;
+  const coin = `${c.coin_plat || 0}p ${c.coin_gold || 0}g ${c.coin_silver || 0}s ${c.coin_copper || 0}c`;
+  document.getElementById('char-info').innerHTML = `
+    <strong>Name:</strong> ${escapeHtml(c.name)}<br>
+    <strong>Class:</strong> ${formatClass(c.adventure_class)} (adventure) · ${formatClass(c.tradeskill_class)} (tradeskill)<br>
+    <strong>Race / Gender:</strong> ${formatRace(c.race)} · ${c.gender == 0 ? 'Male' : 'Female'}<br>
+    <strong>Level:</strong> adv ${lvl} / ts ${tslvl}<br>
+    <strong>Coin:</strong> ${coin}<br>
+    <strong>Status points:</strong> ${(c.status_points || 0).toLocaleString()}<br>
+    <strong>Zone id:</strong> ${c.current_zone_id || '?'}<br>
+    <strong>Admin:</strong> ${c.admin_status || 0}<br>
+    <strong>Factions tracked:</strong> ${(d.factions || []).length}
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Characters tab — generic form runner
+// ---------------------------------------------------------------------------
+async function runForm(kind, dryRun) {
+  if (!selectedChar) { alert('Pick a character first.'); return; }
+  let outId, applyId, body, endpoint;
+  switch (kind) {
+    case 'race-gender': {
+      outId = 'rg-output'; applyId = 'rg-apply';
+      body = {
+        race: document.getElementById('rg-race').value,
+        gender: document.getElementById('rg-gender').value,
+        force: document.getElementById('rg-force').checked,
+        dry_run: dryRun,
+      };
+      endpoint = `/api/characters/${encodeURIComponent(selectedChar.name)}/race-gender`;
+      break;
+    }
+    case 'give-resources': {
+      outId = 'r-output'; applyId = 'r-apply';
+      body = {
+        plat: numOrNull('r-plat'),
+        gold: numOrNull('r-gold'),
+        silver: numOrNull('r-silver'),
+        copper: numOrNull('r-copper'),
+        status: numOrNull('r-status'),
+        force: document.getElementById('r-force').checked,
+        factions: collectFactions(),
+        dry_run: dryRun,
+      };
+      endpoint = `/api/characters/${encodeURIComponent(selectedChar.name)}/give-resources`;
+      break;
+    }
+    case 'gear-up': {
+      outId = 'g-output'; applyId = 'g-apply';
+      body = {
+        force: document.getElementById('g-force').checked,
+        dry_run: dryRun,
+      };
+      endpoint = `/api/characters/${encodeURIComponent(selectedChar.name)}/gear-up`;
+      break;
+    }
+    case 'apply-template': {
+      outId = 't-output'; applyId = null;  // no preview path
+      body = { no_admin: document.getElementById('t-no-admin').checked };
+      endpoint = `/api/characters/${encodeURIComponent(selectedChar.name)}/apply-template`;
+      break;
+    }
+    case 'spawn-bank-items': {
+      outId = 'b-output'; applyId = 'b-apply';
+      // The script reads `character:` from the YAML; we stitch it onto
+      // whatever the user pasted (overriding any value already there).
+      const userYaml = document.getElementById('b-yaml').value.trim();
+      const fullYaml = `character: ${selectedChar.name}\n` + userYaml.replace(/^character:[^\n]*\n?/m, '');
+      body = {
+        yaml: fullYaml,
+        replace: document.getElementById('b-replace').checked,
+        force: document.getElementById('b-force').checked,
+        dry_run: dryRun,
+      };
+      endpoint = `/api/characters/${encodeURIComponent(selectedChar.name)}/spawn-bank-items`;
+      break;
+    }
+    default: return;
+  }
+  const out = document.getElementById(outId);
+  out.className = 'output';
+  out.textContent = `Running…`;
+  try {
+    const r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    showCommandResult(out, d);
+    if (applyId && dryRun && d.ok) {
+      document.getElementById(applyId).disabled = false;
+    }
+    if (applyId && !dryRun) {
+      // After a real apply, reload the character info so the displayed
+      // state matches what was just written.
+      document.getElementById(applyId).disabled = true;
+      if (selectedChar) selectChar(selectedChar.name);
+    }
+  } catch (e) {
+    out.className = 'output error';
+    out.textContent = 'Error: ' + e.message;
+  }
+}
+
+function numOrNull(id) {
+  const v = document.getElementById(id).value.trim();
+  return v === '' ? null : Number(v);
+}
+
+function collectFactions() {
+  const out = [];
+  document.querySelectorAll('#faction-rows .faction-row').forEach(row => {
+    const name = row.querySelector('.f-name').value.trim();
+    const amt = row.querySelector('.f-amt').value.trim();
+    if (name && amt) out.push(`${name}=${amt}`);
+  });
+  return out;
+}
+
+function addFactionRow() {
+  const wrap = document.getElementById('faction-rows');
+  const row = document.createElement('div');
+  row.className = 'faction-row';
+  row.innerHTML = `
+    <input type="text" class="f-name" placeholder="Faction name (substring)">
+    <input type="number" class="f-amt" placeholder="±amount">
+    <button class="btn" onclick="this.parentElement.remove()">×</button>
+  `;
+  wrap.appendChild(row);
+}
+
+// ---------------------------------------------------------------------------
+// Items tab
+// ---------------------------------------------------------------------------
+function reloadCatalog() {
+  const f = document.getElementById('catalog-frame');
+  f.src = '/api/catalog?_=' + Date.now();
+}
+async function regenCatalog() {
+  const status = document.getElementById('catalog-status');
+  status.textContent = 'Regenerating…';
+  try {
+    const r = await fetch('/api/catalog/regen', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      status.textContent = 'Regenerated. ' + (d.stdout || '').split('\n').slice(-2).join(' ');
+      reloadCatalog();
+    } else {
+      status.textContent = 'Failed: ' + ((d.stderr || d.stdout || '').slice(0, 200));
+    }
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+const ADV_CLASSES = ['Commoner','Fighter','Warrior','Guardian','Berserker','Brawler','Monk','Bruiser','Crusader','Shadowknight','Paladin','Priest','Cleric','Templar','Inquisitor','Druid','Warden','Fury','Shaman','Mystic','Defiler','Mage','Sorcerer','Wizard','Warlock','Enchanter','Illusionist','Coercer','Summoner','Conjuror','Necromancer','Scout','Rogue','Swashbuckler','Brigand','Bard','Troubador','Dirge','Predator','Ranger','Assassin','Animalist','Beastlord','Shaper','Channeler'];
+const RACES = ['Barbarian','Dark Elf','Dwarf','Erudite','Froglok','Gnome','Half Elf','Halfling','High Elf','Human','Iksar','Kerra','Ogre','Ratonga','Troll','Wood Elf','Fae','Arasai','Sarnak','Vampire','Aerakyn'];
+function formatClass(id) { return ADV_CLASSES[id] || ('class ' + id); }
+function formatRace(id) { return RACES[id] || ('race ' + id); }
+function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s) { return escapeHtml(s); }
+
+// ---------------------------------------------------------------------------
+// WebSocket — live status
+// ---------------------------------------------------------------------------
+function connectWS() {
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  ws.onmessage = (m) => {
+    try {
+      const d = JSON.parse(m.data);
+      if (d.type === 'status') {
+        renderContainers(d.containers || []);
+        setStatusBadge(d.containers || []);
+      }
+    } catch (_) {}
+  };
+  ws.onclose = () => {
+    setStatusBadge(null);
+    setTimeout(connectWS, 5000);
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+loadServerStatus();
+connectWS();
+addFactionRow();
+startLogPolling();
+</script>
+</body>
+</html>

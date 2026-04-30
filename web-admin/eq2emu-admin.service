@@ -1,0 +1,18 @@
+[Unit]
+Description=EQ2Emu private-server admin dashboard
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=jbaker
+Group=jbaker
+WorkingDirectory=/home/jbaker/repos/eq2emu/web-admin
+ExecStart=/home/jbaker/repos/eq2emu/web-admin/.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8890
+Restart=on-failure
+RestartSec=5
+# Bind localhost only — never expose this dashboard publicly.
+# (See CLAUDE.md "Safety Rails": admin UI must stay localhost-bound.)
+
+[Install]
+WantedBy=multi-user.target
