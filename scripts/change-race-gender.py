@@ -72,19 +72,34 @@ def load_env():
 
 
 def check_offline(name):
+    """Return None if the character is offline, else a description string.
+
+    Trusts the authoritative characters.is_online flag — the world server
+    sets it on login and clears it on logout/disconnect. The previous
+    implementation tailed eq2world.log, which produced false positives
+    for hours after a player had camped because old log lines remain in
+    the buffer.
+    """
     try:
-        r = subprocess.run(
-            ["docker", "exec", SERVER_CONTAINER, "tail", "-n", "300",
-             "/eq2emu/eq2emu/server/logs/eq2world.log"],
-            capture_output=True, text=True, timeout=10, check=True,
+        env = load_env()
+        conn = pymysql.connect(
+            host="127.0.0.1", port=3306, user="root",
+            password=env["MARIADB_ROOT_PASSWORD"], database=env["MARIADB_DATABASE"],
+            cursorclass=pymysql.cursors.DictCursor, charset="utf8mb4",
         )
-    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+    except (pymysql.MySQLError, KeyError, OSError):
         return None
-    needle = name.lower()
-    for line in r.stdout.splitlines()[-200:]:
-        clean = ANSI.sub("", line).strip()
-        if needle in clean.lower():
-            return clean
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT is_online FROM characters WHERE name = %s LIMIT 1",
+                (name,),
+            )
+            row = cur.fetchone()
+            if row and row.get("is_online"):
+                return "characters.is_online = 1 (DB)"
+    finally:
+        conn.close()
     return None
 
 
