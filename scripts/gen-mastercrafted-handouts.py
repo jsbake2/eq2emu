@@ -1,32 +1,36 @@
 #!/usr/bin/env python3
 """
 Generate docs/mastercrafted-handouts.html — a searchable, click-to-copy
-catalog of mastercrafted items. Now supports a "give to <player>" target
-in the page header so the operator's GM client (running in a separate VM)
-can hand items to other players via /giveitem instead of /summonitem.
+catalog. Now covers BOTH crafted (mastercrafted) and dropped gear, color-
+coded by rarity (white / blue / orange / red — normal / treasured /
+legendary / fabled). Supports a "give to <player>" target so the operator's
+GM client can hand items via /giveitem instead of /summonitem.
 
 Read-only against the live eq2emu DB. Credentials from docker/.env.
 
-Mastercrafted gear filter (the DB has no clean MC/HC flag, so we use a
-hand-curated material allowlist):
-
-  * Items where the material token (first word of name, or second word
-    after 'Imbued') is in KEEP_MATERIALS_BY_BAND for the item's level
-    band. The allowlist is the rare-harvest table from the EQ2 wiki,
-    cross-checked against EQ2Emu data — see KEEP_MATERIALS_BY_BAND below.
-  * crafted = 1, id < 10_000_000 (skip client-version duplicate IDs).
-  * Sub-quality prefixes (crude/shaped/forged/fashioned/tailored/blessed/
-    conditioned/pristine) dropped — only the final-quality output kept.
-  * Capped at MAX_LEVEL (matches R_Player/MaxLevel on the live server).
-  * Dedup by LOWER(name), keeping the lowest id.
-
-Consumables: all crafted Food / Bauble / Thrown items, capped at
-MAX_LEVEL. No material filter — there isn't a clean mastercrafted signal
-for consumables in this DB, and excess food/totems is harmless.
-
 Sections:
-  * Gear: item_type in Weapon / Armor / Shield / Ranged / Bauble / Normal.
-  * Consumables: item_type in Food / Bauble / Thrown.
+  * Crafted gear (item_type in Weapon/Armor/Shield/Ranged/Bauble/Normal),
+    only player-craftable mastercrafted (rare-harvest material allowlist).
+  * Crafted consumables (Food / Bauble / Thrown).
+  * Crafted containers (Bag / House Container).
+  * Dropped gear — same item_type set, but crafted=0. Capped at MAX_LEVEL
+    and deduped same as crafted. No material allowlist (there's no
+    materials concept for drops).
+  * Collections (in-game collection chains).
+
+Rarity coloring:
+  Each item picks a rarity class from items.tier:
+    tier 1-4   → 'rarity-normal'    (white, base/handcrafted)
+    tier 5-7   → 'rarity-treasured' (blue, treasured / mastercrafted)
+    tier 8-9   → 'rarity-legendary' (orange)
+    tier 10-12 → 'rarity-fabled'    (red)
+
+Other filters retained from the original mastercrafted catalog:
+  * crafted gear: KEEP_MATERIALS_BY_BAND allowlist applied.
+  * id < 10_000_000 (skip client-version duplicate IDs).
+  * Sub-quality crafting prefixes (crude/shaped/forged/...) dropped.
+  * Capped at MAX_LEVEL.
+  * Dedup by LOWER(name), lowest id wins.
 """
 
 import html
@@ -144,7 +148,7 @@ def material_word(name_lower):
 
 def fetch_gear(cur):
     sql = f"""
-        SELECT id, name, item_type, required_level, recommended_level
+        SELECT id, name, item_type, required_level, recommended_level, tier, slots
           FROM items
          WHERE crafted = 1 AND id < 10000000
            AND item_type IN ({",".join(f"'{t}'" for t in GEAR_TYPES)})
@@ -164,9 +168,110 @@ def fetch_gear(cur):
     return list(seen.values())
 
 
+def fetch_dropped_gear(cur):
+    """All non-crafted gear (item_type in GEAR_TYPES, crafted=0). No material
+    filter — drops use whatever names the content authors wrote."""
+    sql = f"""
+        SELECT id, name, item_type, required_level, recommended_level, tier, slots
+          FROM items
+         WHERE crafted = 0 AND id < 10000000
+           AND item_type IN ({",".join(f"'{t}'" for t in GEAR_TYPES)})
+           AND name <> ''
+         ORDER BY id
+    """
+    seen = {}
+    for r in fetch(cur, sql):
+        key = r["name"].lower()
+        if key in seen:
+            continue
+        if effective_level(r["required_level"], r["recommended_level"]) > MAX_LEVEL:
+            continue
+        # Drops have a lot of placeholder / quest-flagged junk with adventure
+        # _classes=0 (unequippable). Skip those — they're not useful as handout
+        # items.
+        seen[key] = r
+    return list(seen.values())
+
+
+# Slot bit (1 << pos) → friendly filter tag. Multiple bits collapse to one
+# tag (left+right rings → "ring"). Pos values match Items.h EQ2_*_SLOT.
+SLOT_BIT_TO_TAG = {
+    0: "primary", 1: "secondary",
+    2: "head", 3: "chest", 4: "shoulders", 5: "forearms",
+    6: "hands", 7: "legs", 8: "feet",
+    9: "ring", 10: "ring",
+    11: "ear", 12: "ear",
+    13: "neck",
+    14: "wrist", 15: "wrist",
+    16: "ranged",
+    17: "ammo",
+    18: "waist",
+    19: "cloak",
+    20: "charm", 21: "charm",
+    22: "food", 23: "drink",
+}
+
+# Slot filter rows shown in the UI (preserves grouping). The order here
+# is the click order in the rendered chip strip.
+SLOT_FILTER_GROUPS = [
+    ("Armor", ["head", "chest", "shoulders", "forearms", "hands", "legs", "feet", "waist", "cloak"]),
+    ("Jewelry", ["ring", "ear", "neck", "wrist", "charm"]),
+    ("Weapon", ["primary", "secondary", "ranged", "ammo"]),
+]
+
+# Armor-type detection by name keyword. Order matters — first match wins,
+# so chain set words (brigandine etc.) come before bare-material words
+# (steel, ebon) which are shared across chain/plate.
+ARMOR_TYPE_KEYWORDS = [
+    ("plate",   ["vanguard", "devout", "plate cuirass", "blessed bronze", "blessed iron"]),
+    ("chain",   ["brigandine", "chainmail", "chain mail", "melodic", "reverent", "bandit"]),
+    ("leather", ["leather tunic", "leather pants", "leather coat", "leather hauberk",
+                 "leather mantle", "leather cap", "leather gloves", "leather boots",
+                 "leather sleeves", "leather skullcap", "rawhide", "studded leather",
+                 "hide tunic", "tunic of"]),
+    ("cloth",   ["robe", "blouse", "sackcloth", "roughspun", "ruckas", "linen",
+                 "broadcloth", "canvas", "spelltouched", "spellweaver"]),
+]
+
+
+def slot_tags(slots_int):
+    """Translate items.slots bitmask to a sorted set of friendly slot tags."""
+    if not slots_int:
+        return []
+    tags = set()
+    for bit, tag in SLOT_BIT_TO_TAG.items():
+        if slots_int & (1 << bit):
+            tags.add(tag)
+    return sorted(tags)
+
+
+def armor_type_tag(name):
+    """Best-effort armor-type detection (plate/chain/leather/cloth) by
+    keyword in the item name. Returns None if no obvious match — the
+    item just won't be filterable by armor type."""
+    n = name.lower()
+    for tag, kws in ARMOR_TYPE_KEYWORDS:
+        for kw in kws:
+            if kw in n:
+                return tag
+    return None
+
+
+def rarity_class(tier):
+    """Map items.tier to a CSS rarity class for color coding."""
+    t = tier or 0
+    if t >= 10:
+        return "rarity-fabled"      # red
+    if t >= 8:
+        return "rarity-legendary"   # orange
+    if t >= 5:
+        return "rarity-treasured"   # blue
+    return "rarity-normal"          # white
+
+
 def fetch_consumables(cur):
     sql = """
-        SELECT id, name, item_type, required_level, recommended_level
+        SELECT id, name, item_type, required_level, recommended_level, tier, slots
           FROM items
          WHERE crafted = 1 AND id < 10000000
            AND item_type IN ('Food', 'Bauble', 'Thrown')
@@ -226,7 +331,7 @@ def fetch_containers(cur):
     the catalog should just show what's available."""
     types_in = ",".join(f"'{t}'" for t in CONTAINER_TYPES)
     sql = f"""
-        SELECT id, name, item_type, required_level, recommended_level
+        SELECT id, name, item_type, required_level, recommended_level, tier, slots
           FROM items
          WHERE crafted = 1 AND id < 10000000
            AND item_type IN ({types_in})
@@ -322,12 +427,23 @@ section.type > h3 { margin: 0 0 .4rem; font-size: .95rem; color: var(--fg);
                     border-bottom: 1px solid var(--border); padding-bottom: .25rem; }
 .items { display: grid; gap: .25rem; }
 .item { display: grid; grid-template-columns: auto 1fr auto; gap: .6rem; align-items: center;
-        padding: .35rem .6rem; background: var(--card); border-radius: 4px; font-size: .88rem; }
+        padding: .35rem .6rem; background: var(--card); border-radius: 4px; font-size: .88rem;
+        border-left: 3px solid transparent; }
 .item:hover { background: var(--hover); }
 .item .name { color: var(--fg); }
 .item .lvl { color: var(--muted); font-size: .8rem; }
 .item .id  { color: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
              font-size: .8rem; }
+/* Rarity color coding (left border + name color):
+   normal=white, treasured=blue, legendary=orange, fabled=red. */
+.item.rarity-normal     { border-left-color: #ffffff; }
+.item.rarity-normal     .name { color: #ffffff; }
+.item.rarity-treasured  { border-left-color: #4a8fe0; }
+.item.rarity-treasured  .name { color: #6ea8fe; }
+.item.rarity-legendary  { border-left-color: #ff8c2a; }
+.item.rarity-legendary  .name { color: #ffa64d; }
+.item.rarity-fabled     { border-left-color: #d43838; }
+.item.rarity-fabled     .name { color: #ff5b5b; font-weight: 600; }
 button.copy { background: transparent; color: var(--accent); border: 1px solid var(--border);
               border-radius: 4px; padding: .2rem .55rem; font-size: .75rem; cursor: pointer;
               font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
@@ -358,6 +474,31 @@ section.coll > h4 .lvl { color: var(--muted); font-size: .8rem; font-weight: 400
 .cheat-block.copied-line { border-color: var(--copied); }
 .hint  { background: #2a2e35; padding: .6rem .8rem; border-radius: 6px; margin: .8rem 0 0;
          border-left: 3px solid var(--accent); font-size: .85rem; }
+.filters { margin: .8rem 0 0; padding: .6rem .8rem; background: var(--card);
+           border-radius: 6px; border: 1px solid var(--border); }
+.filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: .25rem 0; }
+.filter-label { color: var(--muted); font-size: .8rem; min-width: 5rem; text-transform: uppercase;
+                letter-spacing: .04em; }
+.filter-chip { background: transparent; color: var(--muted); border: 1px solid var(--border);
+               border-radius: 4px; padding: .2rem .55rem; font-size: .78rem; cursor: pointer;
+               font-family: inherit; }
+.filter-chip:hover { color: var(--fg); border-color: var(--accent); }
+.filter-chip.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+.filter-clear { background: transparent; color: var(--muted); border: 1px solid var(--border);
+                border-radius: 4px; padding: .25rem .7rem; font-size: .78rem; cursor: pointer;
+                margin-top: .35rem; font-family: inherit; }
+.filter-clear:hover { color: var(--fg); border-color: var(--accent); }
+/* Rarity chips wear their color on the left border so users see the
+   palette before clicking. Active state uses the rarity color as fill. */
+.rarity-pill { border-left-width: 3px; }
+.rarity-pill.rarity-normal     { border-left-color: #ffffff; }
+.rarity-pill.rarity-treasured  { border-left-color: #4a8fe0; }
+.rarity-pill.rarity-legendary  { border-left-color: #ff8c2a; }
+.rarity-pill.rarity-fabled     { border-left-color: #d43838; }
+.rarity-pill.rarity-normal.active    { background: #ffffff; color: #16181c; }
+.rarity-pill.rarity-treasured.active { background: #4a8fe0; color: #16181c; }
+.rarity-pill.rarity-legendary.active { background: #ff8c2a; color: #16181c; }
+.rarity-pill.rarity-fabled.active    { background: #d43838; color: #ffffff; }
 code { background: #2a2e35; padding: .1rem .35rem; border-radius: 3px;
        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .85em; }
 header.tabs { display: flex; gap: .25rem; padding: .8rem 1.5rem 0; background: #16181c;
@@ -501,13 +642,38 @@ document.addEventListener('click', (e) => {
 });
 
 const search = document.getElementById('search');
-search.addEventListener('input', () => {
+
+// Filter chips — each chip toggles a slot or armor-type predicate.
+// Active chips combine: slot chips OR within their group (any-match);
+// armor chips OR within their group; the two groups AND across groups;
+// AND with the search-box tokens.
+const slotChips = document.querySelectorAll('[data-filter-slot]');
+const armorChips = document.querySelectorAll('[data-filter-armor]');
+const rarityChips = document.querySelectorAll('[data-filter-rarity]');
+const filterClearBtn = document.getElementById('filter-clear');
+
+function activeSet(nodes, attr) {
+  const out = new Set();
+  nodes.forEach(n => { if (n.classList.contains('active')) out.add(n.dataset[attr]); });
+  return out;
+}
+
+function applyFilters() {
   const tokens = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const wantSlots = activeSet(slotChips, 'filterSlot');
+  const wantArmor = activeSet(armorChips, 'filterArmor');
+  const wantRarity = activeSet(rarityChips, 'filterRarity');
   document.querySelectorAll('section.type').forEach(typeSec => {
     let any = false;
     typeSec.querySelectorAll('.item').forEach(it => {
-      const hay = it.dataset.search;
-      const show = !tokens.length || tokens.every(t => hay.includes(t));
+      const hay = it.dataset.search || '';
+      const slots = (it.dataset.slots || '').split(' ').filter(Boolean);
+      const armor = it.dataset.armor || '';
+      const rarity = it.dataset.rarity || '';
+      let show = !tokens.length || tokens.every(t => hay.includes(t));
+      if (show && wantSlots.size) show = slots.some(s => wantSlots.has(s));
+      if (show && wantArmor.size) show = wantArmor.has(armor);
+      if (show && wantRarity.size) show = wantRarity.has(rarity);
       it.style.display = show ? '' : 'none';
       if (show) any = true;
     });
@@ -517,7 +683,30 @@ search.addEventListener('input', () => {
     const visible = bandSec.querySelectorAll('section.type:not([style*="none"])').length;
     bandSec.style.display = visible ? '' : 'none';
   });
-});
+}
+
+search.addEventListener('input', applyFilters);
+slotChips.forEach(c => c.addEventListener('click', () => {
+  c.classList.toggle('active');
+  applyFilters();
+}));
+armorChips.forEach(c => c.addEventListener('click', () => {
+  c.classList.toggle('active');
+  applyFilters();
+}));
+rarityChips.forEach(c => c.addEventListener('click', () => {
+  c.classList.toggle('active');
+  applyFilters();
+}));
+if (filterClearBtn) {
+  filterClearBtn.addEventListener('click', () => {
+    slotChips.forEach(c => c.classList.remove('active'));
+    armorChips.forEach(c => c.classList.remove('active'));
+    rarityChips.forEach(c => c.classList.remove('active'));
+    search.value = '';
+    applyFilters();
+  });
+}
 
 // Collections section has its own search, scoped to that area only.
 const collSearch = document.getElementById('coll-search');
@@ -539,10 +728,11 @@ if (collSearch) {
 """
 
 
-def render(gear_rows, consumable_rows, container_rows, collections):
+def render(gear_rows, consumable_rows, container_rows, dropped_rows, collections):
     gear_buckets = bucket(gear_rows)
     cons_buckets = bucket(consumable_rows)
     container_buckets = bucket(container_rows)
+    dropped_buckets = bucket(dropped_rows)
 
     # nav — each group is a collapsible <details> block, closed by default.
     nav = ['<nav>', '<h1>Crafted item catalog</h1>',
@@ -559,11 +749,20 @@ def render(gear_rows, consumable_rows, container_rows, collections):
 
     if gear_buckets:
         gear_total = sum(sum(len(v) for v in band.values()) for band in gear_buckets.values())
-        open_group("Gear", gear_total)
+        open_group("Crafted gear", gear_total)
         for b, label in BAND_LABELS:
             if b in gear_buckets:
                 total = sum(len(v) for v in gear_buckets[b].values())
                 nav.append(f'<li><a href="#gear-band-{b}">{html.escape(label)} ({total})</a></li>')
+        close_group()
+
+    if dropped_buckets:
+        dropped_total = sum(sum(len(v) for v in band.values()) for band in dropped_buckets.values())
+        open_group("Dropped gear", dropped_total)
+        for b, label in BAND_LABELS:
+            if b in dropped_buckets:
+                total = sum(len(v) for v in dropped_buckets[b].values())
+                nav.append(f'<li><a href="#dropped-band-{b}">{html.escape(label)} ({total})</a></li>')
         close_group()
 
     if cons_buckets:
@@ -594,11 +793,32 @@ def render(gear_rows, consumable_rows, container_rows, collections):
 
     nav.append('</nav>')
 
+    # Build filter chip rows.
+    filter_rows = ['<div class="filters">']
+    for label, slots in SLOT_FILTER_GROUPS:
+        filter_rows.append(f'<div class="filter-row"><span class="filter-label">{html.escape(label)}:</span>')
+        for s in slots:
+            filter_rows.append(f'<button type="button" class="filter-chip" data-filter-slot="{s}">{s}</button>')
+        filter_rows.append('</div>')
+    filter_rows.append('<div class="filter-row"><span class="filter-label">Armor type:</span>')
+    for t in ("plate", "chain", "leather", "cloth"):
+        filter_rows.append(f'<button type="button" class="filter-chip" data-filter-armor="{t}">{t}</button>')
+    filter_rows.append('</div>')
+    filter_rows.append('<div class="filter-row"><span class="filter-label">Rarity:</span>')
+    for t in ("normal", "treasured", "legendary", "fabled"):
+        filter_rows.append(
+            f'<button type="button" class="filter-chip rarity-pill rarity-{t}" '
+            f'data-filter-rarity="{t}">{t}</button>'
+        )
+    filter_rows.append('</div>')
+    filter_rows.append('<button type="button" id="filter-clear" class="filter-clear">Clear filters</button>')
+    filter_rows.append('</div>')
+
     main = ['<main>', '<header class="page">',
             '<h1>Mastercrafted handout catalog</h1>',
-            '<p>Mastercrafted gear (rare-harvest crafted) and crafted consumables, deduped, '
-            f'capped at level {MAX_LEVEL}. Use the search box to narrow the list, set a player '
-            'name in <em>Give to</em> to switch the copy buttons from <code>/summonitem</code> '
+            '<p>Crafted (mastercrafted) and dropped gear, deduped, '
+            f'capped at level {MAX_LEVEL}. Use the search box and filter chips to narrow the list, '
+            'set a player name in <em>Give to</em> to switch the copy buttons from <code>/summonitem</code> '
             'to <code>/giveitem &lt;player&gt;</code>, then click <em>copy</em> on any row.</p>',
             '<div class="target-row">',
             '<label for="give-to">Give to:</label>',
@@ -607,6 +827,7 @@ def render(gear_rows, consumable_rows, container_rows, collections):
             'autocomplete="off" spellcheck="false">',
             '<span id="target-mode" class="target-mode">→ /summonitem (self)</span>',
             '</div>',
+            *filter_rows,
             '<div class="hint">Tips: '
             '<code>/summonitem &lt;id&gt; 1 bank</code> to drop into bank instead of bag &middot; '
             'item id is shown on the right of each row if you ever need to type the command by hand &middot; '
@@ -634,9 +855,17 @@ def render(gear_rows, consumable_rows, container_rows, collections):
                 for r in rows:
                     lvl = effective_level(r["required_level"], r["recommended_level"])
                     name = r["name"].strip()
+                    rarity = rarity_class(r.get("tier"))
+                    rarity_short = rarity.removeprefix("rarity-")
+                    slots_attr = " ".join(slot_tags(r.get("slots") or 0))
+                    armor_attr = armor_type_tag(name) or ""
                     search_blob = f'{name.lower()} {r["id"]} {typ.lower()}'
                     out.append(
-                        f'<div class="item" data-search="{html.escape(search_blob, quote=True)}">'
+                        f'<div class="item {rarity}" '
+                        f'data-search="{html.escape(search_blob, quote=True)}" '
+                        f'data-slots="{html.escape(slots_attr, quote=True)}" '
+                        f'data-armor="{html.escape(armor_attr, quote=True)}" '
+                        f'data-rarity="{rarity_short}">'
                         f'<button class="copy" data-itemid="{r["id"]}" type="button">copy</button>'
                         f'<span class="name">{html.escape(name)} '
                         f'<span class="lvl">&middot; lvl {lvl}</span></span>'
@@ -647,7 +876,8 @@ def render(gear_rows, consumable_rows, container_rows, collections):
             out.append('</section>')
         return out
 
-    main.extend(render_section("gear", "Gear", gear_buckets, GEAR_TYPES, GEAR_TYPE_DISPLAY))
+    main.extend(render_section("gear", "Crafted gear", gear_buckets, GEAR_TYPES, GEAR_TYPE_DISPLAY))
+    main.extend(render_section("dropped", "Dropped gear", dropped_buckets, GEAR_TYPES, GEAR_TYPE_DISPLAY))
     main.extend(render_section("cons", "Consumables", cons_buckets, ("Food", "Bauble", "Thrown"), CONS_DISPLAY))
     main.extend(render_section("cont", "Containers", container_buckets, CONTAINER_TYPES, CONTAINER_DISPLAY))
 
@@ -714,16 +944,18 @@ def main():
         gear_rows = fetch_gear(cur)
         cons_rows = fetch_consumables(cur)
         container_rows = fetch_containers(cur)
+        dropped_rows = fetch_dropped_gear(cur)
         collections = fetch_collections(cur)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(render(gear_rows, cons_rows, container_rows, collections))
+    OUT.write_text(render(gear_rows, cons_rows, container_rows, dropped_rows, collections))
     if LEGACY_MD.exists():
         LEGACY_MD.unlink()
     total_coll_items = sum(len(c["items"]) for _, lst in collections for c in lst)
-    print(f"wrote {OUT} ({len(gear_rows)} gear, {len(cons_rows)} consumable, "
-          f"{len(container_rows)} container, {sum(len(lst) for _, lst in collections)} "
-          f"collections / {total_coll_items} collection items, capped at lvl {MAX_LEVEL})")
+    print(f"wrote {OUT} ({len(gear_rows)} gear, {len(dropped_rows)} dropped, "
+          f"{len(cons_rows)} consumable, {len(container_rows)} container, "
+          f"{sum(len(lst) for _, lst in collections)} collections / "
+          f"{total_coll_items} collection items, capped at lvl {MAX_LEVEL})")
 
 
 if __name__ == "__main__":
