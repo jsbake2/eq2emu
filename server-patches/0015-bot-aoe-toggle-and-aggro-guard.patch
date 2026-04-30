@@ -1,0 +1,569 @@
+diff --git a/source/WorldServer/Bots/Bot.h b/source/WorldServer/Bots/Bot.h
+--- a/source/WorldServer/Bots/Bot.h
++++ b/source/WorldServer/Bots/Bot.h
+@@ -44,6 +44,26 @@
+ 
+ 	void SetMainTank(Entity* tank) { main_tank = tank; }
+ 
++	// AoE toggle. When disabled, bot skips spells whose tier has
++	// max_aoe_targets > 0 (PB-AE / "blue circle" auto-AOEs). Friendly
++	// group buffs are unaffected because they have target_type !=
++	// ENEMY and are picked by GetBuffSpell / GetHoTWardSpell paths.
++	bool GetAOEEnabled() const { return m_aoeEnabled; }
++	void SetAOEEnabled(bool b) { m_aoeEnabled = b; }
++
++	// Aggro guard: returns true when this bot is a non-tank in a group
++	// that has a main tank assigned, and the current target's hate-list
++	// top is NOT the main tank. Caller (SelectSpellToCast) suppresses
++	// damage spells (DD/DoT) until the tank holds aggro. Debuffs are
++	// allowed since they generate less hate and matter for the opener.
++	bool ShouldHoldDamage();
++	Entity* AutoDetectMainTank();
++
++	// /bot prepull: while true, GetHoTWardSpell ignores the HP-loss gate
++	// and lays wards on un-warded group members. Cleared automatically
++	// once everyone in the group has the bot's ward up.
++	void ActivatePrepull() { m_forceWards = true; }
++
+ 	void Camp(bool immediate=false);
+ 	void ChangeLevel(int16 old_level, int16 new_level);
+ 
+@@ -73,6 +93,7 @@
+ 	int32 combat_target;
+ 
+ 	Entity* main_tank;
++	bool m_aoeEnabled = true;
+ 
+ 	map<int32, int8> bot_spells;
+ 	map<int32, int8> dd_spells;
+@@ -91,5 +112,6 @@
+ 	map<int32, int32> recast_times;
+ 	std::atomic<bool> camping;
+ 	std::atomic<bool> immediate_camp;
++	bool m_forceWards = false;
+ 	
+ };
+diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
+--- a/source/WorldServer/Bots/Bot.cpp
++++ b/source/WorldServer/Bots/Bot.cpp
+@@ -5,11 +5,13 @@
+ #include "../WorldDatabase.h"
+ #include "../classes.h"
+ #include "../SpellProcess.h"
++#include "../Rules/Rules.h"
+ 
+ extern WorldDatabase database;
+ extern MasterSpellList master_spell_list;
+ extern World world;
+ extern Classes classes;
++extern RuleManager rule_manager;
+ 
+ Bot::Bot() : NPC() {
+ 	SetBrain(new BotBrain(this));
+@@ -19,6 +21,7 @@
+ 	CanTaunt = false;
+ 	combat_target = 0;
+ 	main_tank = 0;
++	m_aoeEnabled = true;
+ 
+ 	//AddPrimaryEntityCommand("hail", 10000, "hail", "", 0, 0);
+ 	AddSecondaryEntityCommand("invite bot", 10000, "invite", "", 0, 0);
+@@ -162,6 +165,76 @@
+ 	spells.insert(spells.end(), spells2->begin(), spells2->end());
+ 	spells.insert(spells.end(), spells3->begin(), spells3->end());
+ 
++	int8 preferred_tier = rule_manager.GetGlobalRule(R_Spells, DefaultSpellGrantTier)->GetInt8();
++
++	// Chain dedup: collapse chains like Accretion → Profane Accretion → Venal
++	// Accretion to keep only the highest-level entry. Names share no stem so
++	// we use the display-effect description as a chain signature, replacing
++	// digit runs with '#' so wards-for-2167 and wards-for-3854 collapse.
++	int8 advClass = GetAdventureClass();
++	int8 baseClass = classes.GetBaseClass(advClass);
++	int8 secondClass = classes.GetSecondaryBaseClass(advClass);
++	auto class_level = [&](Spell* s) -> int16 {
++		if (!s) return 0;
++		vector<LevelArray*>* lvls = s->GetSpellLevels();
++		if (!lvls) return 0;
++		int16 best = 0;
++		for (size_t i = 0; i < lvls->size(); i++) {
++			LevelArray* la = lvls->at(i);
++			if (!la) continue;
++			if (la->adventure_class == advClass || la->adventure_class == baseClass || la->adventure_class == secondClass) {
++				if (la->spell_level > best) best = la->spell_level;
++			}
++		}
++		return best;
++	};
++	auto chain_key = [](Spell* s) -> string {
++		if (!s || !s->GetSpellData()) return "";
++		vector<SpellDisplayEffect*>* effects = s->GetSpellEffects();
++		if (!effects || effects->empty()) return "";
++		string tmpl;
++		for (size_t i = 0; i < effects->size(); i++) {
++			SpellDisplayEffect* e = effects->at(i);
++			if (!e || e->description.empty()) continue;
++			string norm;
++			for (char c : e->description) {
++				if (isdigit((unsigned char)c) || c == ',' || c == '.') {
++					if (norm.empty() || norm.back() != '#')
++						norm.push_back('#');
++				} else {
++					norm.push_back(c);
++				}
++			}
++			if (!tmpl.empty()) tmpl += "|";
++			tmpl += norm;
++		}
++		if (tmpl.empty()) return "";
++		char buf[64];
++		snprintf(buf, sizeof(buf), "%d:%d:%d:",
++			(int)s->GetSpellData()->spell_type,
++			(int)s->GetSpellData()->target_type,
++			(int)s->GetSpellData()->friendly_spell);
++		return string(buf) + tmpl;
++	};
++	map<string, Spell*> chain_best;
++	vector<Spell*> uniq;
++	uniq.reserve(spells.size());
++	for (size_t i = 0; i < spells.size(); i++) {
++		Spell* s = spells[i];
++		string key = chain_key(s);
++		if (key.empty()) {
++			// No description → can't dedup, keep as-is.
++			uniq.push_back(s);
++			continue;
++		}
++		auto it = chain_best.find(key);
++		if (it == chain_best.end() || class_level(s) > class_level(it->second))
++			chain_best[key] = s;
++	}
++	for (auto& kv : chain_best)
++		uniq.push_back(kv.second);
++	spells.swap(uniq);
++
+ 	vector<Spell*>::iterator itr;
+ 	map<int32, int8>* spell_list = 0;
+ 	for (itr = spells.begin(); itr != spells.end(); itr++) {
+@@ -204,8 +277,12 @@
+ 			spell_list = 0;
+ 			break;
+ 		}
+-		if (spell_list && spell_list->count((*itr)->GetSpellID()) == 0)
+-			(*spell_list)[(*itr)->GetSpellID()] = 1;
++		if (spell_list && spell_list->count((*itr)->GetSpellID()) == 0) {
++			int8 tier_to_use = 1;
++			if (preferred_tier > 1 && master_spell_list.GetSpell((*itr)->GetSpellID(), preferred_tier))
++				tier_to_use = preferred_tier;
++			(*spell_list)[(*itr)->GetSpellID()] = tier_to_use;
++		}
+ 	}
+ 
+ 	safe_delete(spells1);
+@@ -256,19 +333,63 @@
+ 	if (spell)
+ 		return spell;
+ 
+-	// DoT
+-	spell = GetDoTSpell();
+-	if (spell)
+-		return spell;
++	// Damage (DoT, DD) — gated by aggro guard so non-tank DPS
++	// don't pull aggro before the main tank establishes hate.
++	if (!ShouldHoldDamage()) {
++		spell = GetDoTSpell();
++		if (spell)
++			return spell;
+ 
+-	// DD
+-	spell = GetDDSpell();
+-	if (spell)
+-		return spell;
++		spell = GetDDSpell();
++		if (spell)
++			return spell;
++	}
+ 
+ 	return 0;
+ }
+ 
++Entity* Bot::AutoDetectMainTank() {
++	// Pick the highest-level fighter-class member of the owner's group.
++	// Lets /bot aoe + aggro guard work without /bot maintank for groups
++	// with one obvious tank.
++	Entity* owner = GetOwner();
++	if (!owner) return nullptr;
++	GroupMemberInfo* gmi = owner->GetGroupMemberInfo();
++	if (!gmi) return nullptr;
++	PlayerGroup* group = world.GetGroupManager()->GetGroup(gmi->group_id);
++	if (!group) return nullptr;
++	Entity* best = nullptr;
++	group->MGroupMembers.readlock(__FUNCTION__, __LINE__);
++	deque<GroupMemberInfo*>* members = group->GetMembers();
++	for (size_t i = 0; i < members->size(); i++) {
++		Entity* m = members->at(i)->member;
++		if (!m || !m->Alive())
++			continue;
++		if (classes.GetBaseClass(m->GetAdventureClass()) != FIGHTER)
++			continue;
++		if (!best || m->GetLevel() > best->GetLevel())
++			best = m;
++	}
++	group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
++	return best;
++}
++
++bool Bot::ShouldHoldDamage() {
++	// Use explicit /bot maintank assignment first; fall back to auto-detect
++	// (any fighter-class group member). Keeps the toggle automatic for
++	// single-tank groups without losing the override path.
++	Entity* tank = main_tank ? main_tank : AutoDetectMainTank();
++	if (!tank)
++		return false;        // no tank in group — fire freely
++	if (tank == this)
++		return false;        // I am the tank — fire freely
++	Spawn* tgt = GetTarget();
++	if (!tgt || !tgt->IsNPC())
++		return false;
++	Entity* most_hated = ((NPC*)tgt)->Brain()->GetMostHated();
++	return most_hated != tank;
++}
++
+ void Bot::SetRecast(Spell* spell, int32 time) {
+ 	recast_times[spell->GetSpellID()] = time;
+ }
+@@ -294,6 +415,8 @@
+ 	for (itr = dd_spells.begin(); itr != dd_spells.end(); itr++) {
+ 		spell = master_spell_list.GetSpell(itr->first, itr->second);
+ 		if (spell && IsSpellReady(spell)) {
++			if (!m_aoeEnabled && spell->GetSpellData()->max_aoe_targets > 0)
++				continue;  // AoE blocked by /bot aoe off
+ 			return spell;
+ 		}
+ 	}
+@@ -425,31 +548,41 @@
+ 	if (!spell)
+ 		return 0;
+ 
+-	// There was a spell so find a group member that needs healing
+ 	int8 threshold = GetHealThreshold();
+ 	GroupMemberInfo* gmi = GetGroupMemberInfo();
+-	PlayerGroup* group = world.GetGroupManager()->GetGroup(gmi->group_id);
++	PlayerGroup* group = gmi ? world.GetGroupManager()->GetGroup(gmi->group_id) : nullptr;
+ 	if (group)
+ 	{
+ 		group->MGroupMembers.readlock(__FUNCTION__, __LINE__);
+ 		deque<GroupMemberInfo*>* members = group->GetMembers();
+ 
++		// Prepull mode: ward un-warded members regardless of HP.
++		if (m_forceWards) {
++			for (int8 i = 0; i < members->size(); i++) {
++				Entity* member = members->at(i)->member;
++				if (!member || !member->Alive()) continue;
++				if (member->GetSpellEffect(itr->first)) continue;  // already warded with this spell
++				SetTarget(member);
++				group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
++				return spell;
++			}
++			// Everyone has the highest-tier ward up — exit prepull mode.
++			m_forceWards = false;
++		}
++
++		// Reactive: heal a group member that's wounded but above the
++		// floor where straight heals take over.
+ 		for (int8 i = 0; i < members->size(); i++) {
+ 			Entity* member = members->at(i)->member;
+-			
+-			if(!member)
+-				continue;
+-			
++			if (!member) continue;
+ 			int8 percent = 0;
+ 			if (member->GetHP() > 0)
+ 				percent = (int8)(((float)member->GetHP() / member->GetTotalHP()) * 100);
+ 
+ 			if (percent <= 99 && percent > threshold) {
+-				if (spell) {
+-					SetTarget(member);
+-					group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
+-					return spell;
+-				}
++				SetTarget(member);
++				group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
++				return spell;
+ 			}
+ 		}
+ 		group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
+@@ -499,6 +632,8 @@
+ 	for (itr = dot_spells.begin(); itr != dot_spells.end(); itr++) {
+ 		spell = master_spell_list.GetSpell(itr->first, itr->second);
+ 		if (spell && IsSpellReady(spell)) {
++			if (!m_aoeEnabled && spell->GetSpellData()->max_aoe_targets > 0)
++				continue;  // AoE blocked by /bot aoe off
+ 			// If target already has this effect on them then continue to the next spell
+ 			if (((Entity*)GetTarget())->GetSpellEffect(itr->first))
+ 				continue;
+@@ -523,6 +658,16 @@
+ 	for (itr = buff_spells.begin(); itr != buff_spells.end(); itr++) {
+ 		spell = master_spell_list.GetSpell(itr->first, itr->second);
+ 		if (spell && IsSpellReady(spell)) {
++			// Skip short-duration buffs out of combat — they're combat-tactical
++			// (Fervence, Sacred Armor, Fanaticism etc) and would churn every
++			// tick between fights. 600 = 60s in 0.1s units. duration_until_cancel
++			// and long-duration buffs cycle normally; the 'effect already up'
++			// check below keeps them from being re-cast while live.
++			int32 dur = spell->GetSpellData()->duration1;
++			bool short_buff = (dur > 0 && dur < 600 && !spell->GetSpellData()->duration_until_cancel);
++			if (short_buff)
++				continue;
++
+ 			target = 0;
+ 
+ 			if (spell->GetSpellData()->target_type == SPELL_TARGET_SELF)
+diff --git a/source/WorldServer/Bots/BotDB.cpp b/source/WorldServer/Bots/BotDB.cpp
+--- a/source/WorldServer/Bots/BotDB.cpp
++++ b/source/WorldServer/Bots/BotDB.cpp
+@@ -138,9 +138,26 @@
+ 	
+ 	LoadBotAppearance(bot);
+ 	LoadBotEquipment(bot);
++
++	// Load the AoE-enabled flag (defaults to 1 server-side via the
++	// schema default; fall back to true if the column is absent on
++	// older deployments that haven't applied migration 014).
++	DatabaseResult aoe_result;
++	if (database_new.Select(&aoe_result, "SELECT `aoe_enabled` FROM `bots` WHERE `bot_id` = %u", bot->BotID)) {
++		if (aoe_result.Next())
++			bot->SetAOEEnabled(aoe_result.GetInt8(0) != 0);
++	}
++
+ 	return true;
+ }
+ 
++void WorldDatabase::SaveBotAOE(Bot* bot) {
++	if (!database_new.Query("UPDATE `bots` SET `aoe_enabled` = %u WHERE `bot_id` = %u",
++		bot->GetAOEEnabled() ? 1 : 0, bot->BotID)) {
++		LogWrite(DATABASE__ERROR, 0, "DBNew", "MySQL Error %u: %s", database_new.GetError(), database_new.GetErrorMsg());
++	}
++}
++
+ void WorldDatabase::LoadBotAppearance(Bot* bot) {
+ 	DatabaseResult result;
+ 	string type;
+diff --git a/source/WorldServer/Bots/BotCommands.cpp b/source/WorldServer/Bots/BotCommands.cpp
+--- a/source/WorldServer/Bots/BotCommands.cpp
++++ b/source/WorldServer/Bots/BotCommands.cpp
+@@ -18,12 +18,52 @@
+ 
+ 	if (sep && sep->IsSet(0)) {
+ 		if (strncasecmp("camp", sep->arg[0], 4) == 0) {
+-			if (!client->GetPlayer()->GetTarget() || !client->GetPlayer()->GetTarget()->IsBot()) {
+-				client->SimpleMessage(CHANNEL_COLOR_YELLOW, "You must target a bot");
++			// Three forms:
++			//   /bot camp           — target-based (legacy)
++			//   /bot camp <id>      — by spawn id
++			//   /bot camp all       — every group bot owned by caller
++			if (sep->IsSet(1) && strncasecmp("all", sep->arg[1], 3) == 0) {
++				GroupMemberInfo* gmi = client->GetPlayer()->GetGroupMemberInfo();
++				if (!gmi) {
++					client->SimpleMessage(CHANNEL_COLOR_YELLOW, "You are not in a group.");
++					return;
++				}
++				PlayerGroup* group = world.GetGroupManager()->GetGroup(gmi->group_id);
++				if (!group) return;
++				group->MGroupMembers.readlock(__FUNCTION__, __LINE__);
++				deque<GroupMemberInfo*>* members = group->GetMembers();
++				vector<Bot*> to_camp;
++				for (size_t i = 0; i < members->size(); i++) {
++					Entity* m = members->at(i)->member;
++					if (m && m->IsBot() && ((Bot*)m)->GetOwner() == client->GetPlayer())
++						to_camp.push_back((Bot*)m);
++				}
++				group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
++				for (Bot* b : to_camp) b->Camp();
++				client->Message(CHANNEL_COLOR_YELLOW, "Camped %zu bot(s).", to_camp.size());
++				return;
++			}
++
++			Bot* bot = nullptr;
++			if (sep->IsSet(1) && sep->IsNumber(1)) {
++				// arg is the slot from /bot list, not the runtime spawn id.
++				// Match the lookup pattern used by /bot delete / /bot follow.
++				int32 index = atoi(sep->arg[1]);
++				if (client->GetPlayer()->SpawnedBots.count(index) > 0) {
++					Spawn* sp = client->GetCurrentZone()->GetSpawnByID(client->GetPlayer()->SpawnedBots[index]);
++					if (sp && sp->IsBot()) bot = (Bot*)sp;
++				}
++			}
++			if (!bot) {
++				// Fall back to target.
++				if (client->GetPlayer()->GetTarget() && client->GetPlayer()->GetTarget()->IsBot())
++					bot = (Bot*)client->GetPlayer()->GetTarget();
++			}
++			if (!bot) {
++				client->SimpleMessage(CHANNEL_COLOR_YELLOW, "Target a bot, or pass an id: /bot camp <id> | /bot camp all");
+ 				return;
+ 			}
+ 
+-			Bot* bot = (Bot*)client->GetPlayer()->GetTarget();
+ 			if (bot->GetOwner() != client->GetPlayer()) {
+ 				client->SimpleMessage(CHANNEL_COLOR_YELLOW, "You can only camp your own bots.");
+ 				return;
+@@ -32,6 +72,32 @@
+ 			bot->Camp();
+ 			return;
+ 		}
++		else if (strncasecmp("prepull", sep->arg[0], 7) == 0) {
++			// Activate prepull mode on every bot in the caster's group that
++			// they own. Bots will lay wards proactively on the next tick and
++			// continue cycling buffs through the normal idle path.
++			GroupMemberInfo* gmi = client->GetPlayer()->GetGroupMemberInfo();
++			if (!gmi) {
++				// Solo: prepull whatever bots the caller owns in this zone.
++				client->SimpleMessage(CHANNEL_COLOR_YELLOW, "Group up first — prepull primes the group.");
++				return;
++			}
++			PlayerGroup* group = world.GetGroupManager()->GetGroup(gmi->group_id);
++			if (!group) return;
++			group->MGroupMembers.readlock(__FUNCTION__, __LINE__);
++			deque<GroupMemberInfo*>* members = group->GetMembers();
++			int count = 0;
++			for (size_t i = 0; i < members->size(); i++) {
++				Entity* m = members->at(i)->member;
++				if (m && m->IsBot() && ((Bot*)m)->GetOwner() == client->GetPlayer()) {
++					((Bot*)m)->ActivatePrepull();
++					count++;
++				}
++			}
++			group->MGroupMembers.releasereadlock(__FUNCTION__, __LINE__);
++			client->Message(CHANNEL_COLOR_YELLOW, "Prepull primed on %d bot(s).", count);
++			return;
++		}
+ 		else if (strncasecmp("attack", sep->arg[0], 6) == 0) {
+ 			if (client->GetPlayer()->GetTarget() && client->GetPlayer()->GetTarget()->IsEntity() && client->GetPlayer()->GetTarget()->Alive()) {
+ 				Entity* target = (Entity*)client->GetPlayer()->GetTarget();
+@@ -204,6 +270,18 @@
+ 								member->SetX(player->GetX());
+ 								member->SetY(player->GetY());
+ 								member->SetZ(player->GetZ());
++								// Reset pos_next_x/y/z so the client doesn't extrapolate
++								// motion back to the pre-summon position (run-off animation).
++								member->appearance.pos.X2 = member->appearance.pos.X;
++								member->appearance.pos.Y2 = member->appearance.pos.Y;
++								member->appearance.pos.Z2 = member->appearance.pos.Z;
++								member->appearance.pos.X3 = member->appearance.pos.X;
++								member->appearance.pos.Y3 = member->appearance.pos.Y;
++								member->appearance.pos.Z3 = member->appearance.pos.Z;
++								// Wipe stale movement state so the bot doesn't run back to where
++								// it was before the teleport. Brain re-evaluates next tick.
++								member->ClearRunningLocations();
++								member->following = false;
+ 								client->Message(CHANNEL_COLOR_YELLOW, "Summoning %s.", member->GetName());
+ 							}
+ 						}
+@@ -225,6 +303,14 @@
+ 						bot->SetX(player->GetX());
+ 						bot->SetY(player->GetY());
+ 						bot->SetZ(player->GetZ());
++						bot->appearance.pos.X2 = bot->appearance.pos.X;
++						bot->appearance.pos.Y2 = bot->appearance.pos.Y;
++						bot->appearance.pos.Z2 = bot->appearance.pos.Z;
++						bot->appearance.pos.X3 = bot->appearance.pos.X;
++						bot->appearance.pos.Y3 = bot->appearance.pos.Y;
++						bot->appearance.pos.Z3 = bot->appearance.pos.Z;
++						bot->ClearRunningLocations();
++						bot->following = false;
+ 						client->Message(CHANNEL_COLOR_YELLOW, "Summoning %s.", bot->GetName());
+ 						return;
+ 					}
+@@ -255,6 +341,7 @@
+ 	client->SimpleMessage(CHANNEL_COLOR_YELLOW, "/bot inv [give/list/remove] - manage bot equipment, for remove a slot must be provided");
+ 	client->SimpleMessage(CHANNEL_COLOR_YELLOW, "/bot settings [helm/hood/cloak/taunt] [0/1] - Turn setting on (1) or off(0)");
+ 	client->SimpleMessage(CHANNEL_COLOR_YELLOW, "/bot camp - removes the bot from your group and despawns them");
++	client->SimpleMessage(CHANNEL_COLOR_YELLOW, "/bot aoe on|off [<slot>|all] - toggle AoE damage spells");
+ 	client->SimpleMessage(CHANNEL_COLOR_YELLOW, "/bot attack - commands your bots to attack your target");
+ 	client->SimpleMessage(CHANNEL_COLOR_YELLOW, "/bot spells - lists bot spells, not fully implemented yet");
+ 	client->SimpleMessage(CHANNEL_COLOR_YELLOW, "/bot maintank - sets targeted group member as the main tank for your bots");
+@@ -429,6 +516,18 @@
+ 			bot->SetSpawnOrigZ(bot->GetZ());
+ 			bot->SetSpawnOrigHeading(bot->GetHeading());
+ 			bot->SetLocation(client->GetPlayer()->GetLocation());
++
++			// Initialize destination/waypoint coords to match the spawn position.
++			// memset zeroed appearance.pos earlier; without this the client's spawn
++			// packet has pos_next_x/y/z = 0 and renders the bot sprinting toward
++			// the world origin in a straight line.
++			bot->appearance.pos.X2 = bot->appearance.pos.X;
++			bot->appearance.pos.Y2 = bot->appearance.pos.Y;
++			bot->appearance.pos.Z2 = bot->appearance.pos.Z;
++			bot->appearance.pos.X3 = bot->appearance.pos.X;
++			bot->appearance.pos.Y3 = bot->appearance.pos.Y;
++			bot->appearance.pos.Z3 = bot->appearance.pos.Z;
++
+ 			bot->SetInitialState(16512);
+ 			bot->SetModelType(id_list->at(0));
+ 			bot->SetAdventureClass(advClass);
+@@ -541,17 +640,34 @@
+ 			bot->SetSpawnOrigZ(bot->GetZ());
+ 			bot->SetSpawnOrigHeading(bot->GetHeading());
+ 			bot->SetLocation(client->GetPlayer()->GetLocation());
++
++			// Initialize destination/waypoint coords to match the spawn position.
++			// memset zeroed appearance.pos earlier; without this the client's spawn
++			// packet has pos_next_x/y/z = 0 and renders the bot sprinting toward
++			// the world origin in a straight line.
++			bot->appearance.pos.X2 = bot->appearance.pos.X;
++			bot->appearance.pos.Y2 = bot->appearance.pos.Y;
++			bot->appearance.pos.Z2 = bot->appearance.pos.Z;
++			bot->appearance.pos.X3 = bot->appearance.pos.X;
++			bot->appearance.pos.Y3 = bot->appearance.pos.Y;
++			bot->appearance.pos.Z3 = bot->appearance.pos.Z;
++
+ 			bot->SetInitialState(16512);
+ 			bot->SetLevel(client->GetPlayer()->GetLevel());
+ 			bot->SetDifficulty(6);
+ 			bot->size = 32;
++			// Use the ChangeLevel formula at spawn so a freshly-summoned bot has
++			// stats comparable to a player of the same level (lvl 50 = ~5040 HP).
++			// Old: 25 * level + 1 (lvl 50 = 1251 HP) was unviable for raid roles.
+ 			if (bot->GetTotalHP() == 0) {
+-				bot->SetTotalHP(25 * bot->GetLevel() + 1);
+-				bot->SetHP(25 * bot->GetLevel() + 1);
++				int32 hp = bot->GetLevel() * bot->GetLevel() * 2 + 40;
++				bot->SetTotalHP(hp);
++				bot->SetHP(hp);
+ 			}
+ 			if (bot->GetTotalPower() == 0) {
+-				bot->SetTotalPower(25 * bot->GetLevel() + 1);
+-				bot->SetPower(25 * bot->GetLevel() + 1);
++				sint32 power = (sint32)(bot->GetLevel() * bot->GetLevel() * 2.1 + 45);
++				bot->SetTotalPower(power);
++				bot->SetPower(power);
+ 			}
+ 			bot->SetOwner(client->GetPlayer());
+ 			bot->UpdateWeapons();
+@@ -560,7 +676,12 @@
+ 			client->GetCurrentZone()->AddSpawn(bot);
+ 			
+ 			if (sep->IsSet(1) && sep->IsNumber(1) && atoi(sep->arg[1]) == 1) {
+-				client->GetCurrentZone()->SendSpawn(bot, client);
++				// PrepareSpawnID flips the per-client SpawnState to SPAWN_STATE_SENDING.
++				// Without it, SendSpawn() sees !IsSendingSpawn and silently drops the
++				// packet, leaving the bot fully alive server-side (it can attack and
++				// heal) but never sent to the client (no render, no F2 target).
++				if (client->GetPlayer()->SetSpawnMap(bot))
++					client->GetCurrentZone()->SendSpawn(bot, client);
+ 				
+ 				int8 result = world.GetGroupManager()->Invite(client->GetPlayer(), bot);
+ 
+diff --git a/source/WorldServer/WorldDatabase.h b/source/WorldServer/WorldDatabase.h
+--- a/source/WorldServer/WorldDatabase.h
++++ b/source/WorldServer/WorldDatabase.h
+@@ -626,6 +626,7 @@
+ 	/* Bots - BotDB.cpp */
+ 	int32				CreateNewBot(int32 char_id, string name, int8 race, int8 advClass, int8 gender, int16 model_id, int32& index);
+ 	void				SaveBotAppearance(Bot* bot);
++	void				SaveBotAOE(Bot* bot);
+ 	void				SaveBotColors(int32 bot_id, const char* type, EQ2_Color color);
+ 	void				SaveBotFloats(int32 bot_id, const char* type, float float1, float float2, float float3);
+ 	bool				LoadBot(int32 char_id, int32 bot_index, Bot* bot);
