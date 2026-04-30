@@ -1,3 +1,4 @@
+snapshot ready
 diff --git a/source/WorldServer/Bots/Bot.h b/source/WorldServer/Bots/Bot.h
 --- a/source/WorldServer/Bots/Bot.h
 +++ b/source/WorldServer/Bots/Bot.h
@@ -17,10 +18,26 @@ diff --git a/source/WorldServer/Bots/Bot.h b/source/WorldServer/Bots/Bot.h
  	
  
  	int8 GetHealThreshold();
+@@ -110,6 +110,15 @@
+ 
+ 	// First int32 = spell id (change to timer id later), second int32 is time the spell is available to cast again
+ 	map<int32, int32> recast_times;
++	// Per (target_spawn_id, det_type) → consecutive cure attempts since the
++	// det last cleared. Bumps when GetCureSpell hands out a cure for that
++	// combo; entry is erased when HasCurableDetrimentType flips to false
++	// (det cleared by us, by someone else, or expired). Once the count hits
++	// MAX_CURE_ATTEMPTS the combo is skipped — covers raid-level curses /
++	// dispel-strength mismatches where the cure fires but never strips.
++	std::map<std::pair<int32, int8>, int8> m_cureAttempts;
++	static const int8 MAX_CURE_ATTEMPTS = 3;
++
+ 	std::atomic<bool> camping;
+ 	std::atomic<bool> immediate_camp;
+ 	bool m_forceWards = false;
 diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
 --- a/source/WorldServer/Bots/Bot.cpp
 +++ b/source/WorldServer/Bots/Bot.cpp
-@@ -743,7 +743,72 @@
+@@ -743,7 +743,89 @@
  Spell* Bot::GetCureSpell() {
  	if(world.IsReloadingSubsystems())
  		return nullptr;
@@ -62,10 +79,25 @@ diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
 +		Entity* candidate = candidates[ci];
 +		if (!candidate || !candidate->Alive())
 +			continue;
++		const int32 cand_id = candidate->GetID();
 +		for (size_t pi = 0; pi < priority_count; pi++) {
 +			int8 dt = det_priority[pi];
-+			if (!candidate->HasCurableDetrimentType(dt))
++			std::pair<int32, int8> key(cand_id, dt);
++			if (!candidate->HasCurableDetrimentType(dt)) {
++				// Det cleared (by us, by someone else, or expired) — forget
++				// any prior attempt count so we'll retry fresh next time
++				// it shows up.
++				m_cureAttempts.erase(key);
 +				continue;
++			}
++			auto attempt_itr = m_cureAttempts.find(key);
++			if (attempt_itr != m_cureAttempts.end() &&
++			    attempt_itr->second >= MAX_CURE_ATTEMPTS) {
++				// Tried this combo MAX_CURE_ATTEMPTS times and the det's
++				// still up — give up so the bot stops thrashing. Will reset
++				// when HasCurableDetrimentType eventually returns false.
++				continue;
++			}
 +			// Two-pass match: prefer a cure whose det_type matches the
 +			// detriment exactly; fall back to a generic cure (det_type=0,
 +			// "Cure" / "Brood Cure" — dispels any) if no specific cure is
@@ -79,6 +111,7 @@ diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
 +					continue;
 +				int8 sdt = s->GetSpellData()->det_type;
 +				if (sdt == dt) {
++					m_cureAttempts[key] = (int8)(m_cureAttempts[key] + 1);
 +					SetTarget(candidate);
 +					return s;
 +				}
@@ -86,6 +119,7 @@ diff --git a/source/WorldServer/Bots/Bot.cpp b/source/WorldServer/Bots/Bot.cpp
 +					generic = s;
 +			}
 +			if (generic) {
++				m_cureAttempts[key] = (int8)(m_cureAttempts[key] + 1);
 +				SetTarget(candidate);
 +				return generic;
 +			}
